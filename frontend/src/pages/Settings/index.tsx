@@ -62,7 +62,6 @@ const SettingsPage: React.FC = () => {
   });
 
   const [savedFields, setSavedFields] = useState<Record<string, boolean>>({});
-  const [webhookPort, setWebhookPort] = useState("3000");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [paperlessStatus, setPaperlessStatus] = useState<ConnectionStatus>("idle");
@@ -80,14 +79,12 @@ const SettingsPage: React.FC = () => {
         paperless_token: c.paperless_token.includes("•"),
         llm_api_key: c.llm_api_key.includes("•"),
         embedding_api_key: c.embedding_api_key.includes("•"),
-        webhook_secret: c.webhook_secret.includes("•"),
       });
       setConfig({
         ...c,
         paperless_token: c.paperless_token.includes("•") ? "" : c.paperless_token,
         llm_api_key: c.llm_api_key.includes("•") ? "" : c.llm_api_key,
         embedding_api_key: c.embedding_api_key.includes("•") ? "" : c.embedding_api_key,
-        webhook_secret: c.webhook_secret.includes("•") ? "" : c.webhook_secret,
       });
     }).catch(() => {});
     getIndexStats().then(setIndexStats).catch(() => {});
@@ -96,8 +93,6 @@ const SettingsPage: React.FC = () => {
   const update = (data: Partial<AppConfig>) => {
     setConfig((prev) => ({ ...prev, ...data }));
   };
-
-  const webhookUrl = `${window.location.protocol}//${window.location.hostname}:${webhookPort}/api/webhook/document`;
 
   const handleSave = async () => {
     setSaving(true);
@@ -109,7 +104,6 @@ const SettingsPage: React.FC = () => {
         paperless_token: config.paperless_token !== "",
         llm_api_key: config.llm_api_key !== "",
         embedding_api_key: config.embedding_api_key !== "",
-        webhook_secret: config.webhook_secret !== "",
       });
       setTimeout(() => setSaveMessage(""), 3000);
     } catch (e: any) {
@@ -294,50 +288,6 @@ const SettingsPage: React.FC = () => {
               placeholder={t("setup.llm.modelPlaceholder")}
               value={config.llm_model}
               onChange={(e) => update({ llm_model: e.target.value })}
-            />
-          </div>
-        </Section>
-
-        {/* ── Webhook ───────────────────────────────────────────────────── */}
-        <Section
-          title="Webhook"
-          tooltip={t("settings.tooltips.webhook")}
-        >
-          <div className="flex flex-col gap-4">
-            <Input
-              label={t("settings.webhookPort")}
-              helpText={t("settings.webhookPortHelp")}
-              value={webhookPort}
-              onChange={(e) => setWebhookPort(e.target.value)}
-              type="number"
-              placeholder="3000"
-            />
-            <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
-              <p className="font-medium text-gray-700 mb-1">
-                {t("settings.webhookUrl")}:
-              </p>
-              <code className="text-xs text-primary-700 break-all">
-                {webhookUrl}
-              </code>
-              <p className="mt-2 text-xs text-gray-500">
-                {t("settings.webhookHelp")}
-              </p>
-              <button
-                onClick={() => navigator.clipboard.writeText(webhookUrl)}
-                className="mt-2 flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800 transition"
-              >
-                📋 {t("settings.webhookCopy")}
-              </button>
-            </div>
-            <Input
-              label={t("settings.webhookSecret")}
-              placeholder={
-                savedFields.webhook_secret ? savedPlaceholder : "••••••••"
-              }
-              helpText={t("settings.webhookSecretHelp")}
-              value={config.webhook_secret}
-              onChange={(e) => update({ webhook_secret: e.target.value })}
-              type="password"
             />
           </div>
         </Section>

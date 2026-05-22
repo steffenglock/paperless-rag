@@ -86,13 +86,6 @@ async def search_and_answer(
 ) -> dict:
     """
     Full RAG pipeline – returns answer + source chunks.
-
-    Returns:
-        {
-            "answer": str,
-            "sources": [ { document_id, document_title, text, distance } ]
-            "query": str,
-        }
     """
     emb_config = _get_embedding_config(session)
     llm_config = _get_llm_config(session)
@@ -111,7 +104,7 @@ async def search_and_answer(
             "query": query,
         }
 
-    # 1. Embed the query
+    # 1. Embed the query (Session wird mitgereicht)
     logger.info("RAG query: '%s'", query[:80])
     query_embedding = await embed_query(
         query,
@@ -119,6 +112,7 @@ async def search_and_answer(
         base_url=emb_config["base_url"],
         api_key=emb_config["api_key"],
         model=emb_config["model"],
+        session=session,
     )
 
     # 2. Retrieve relevant chunks from ChromaDB
@@ -136,7 +130,6 @@ async def search_and_answer(
     # 3. Build context and prompt
     context = _build_context(chunks)
 
-    # Truncate context if too long
     if len(context) > MAX_CONTEXT_CHARS:
         context = context[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated…]"
 
@@ -176,18 +169,18 @@ async def stream_answer(
 ) -> AsyncIterator[str]:
     """
     Streaming RAG pipeline – yields answer tokens as they arrive.
-    First yields source metadata as a JSON prefix, then streams the answer.
     """
     emb_config = _get_embedding_config(session)
     llm_config = _get_llm_config(session)
 
-    # Embed query and retrieve chunks
+    # Embed query (Session wird mitgereicht)
     query_embedding = await embed_query(
         query,
         provider=emb_config["provider"],
         base_url=emb_config["base_url"],
         api_key=emb_config["api_key"],
         model=emb_config["model"],
+        session=session,
     )
 
     chunks = query_collection(query_embedding, n_results=n_results)

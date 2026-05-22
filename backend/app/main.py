@@ -22,7 +22,6 @@ from app.api.routes import (
     paperless_router,
     index_router,
     rag_router,
-    webhook_router,
     sync_router,
 )
 
@@ -101,7 +100,6 @@ app.include_router(config_router)
 app.include_router(paperless_router)
 app.include_router(index_router)
 app.include_router(rag_router)
-app.include_router(webhook_router)
 app.include_router(sync_router)
 
 

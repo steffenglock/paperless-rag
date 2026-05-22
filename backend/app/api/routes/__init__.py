@@ -7,7 +7,6 @@ from .config import router as config_router
 from .paperless import router as paperless_router
 from .index import router as index_router
 from .rag import router as rag_router
-from .webhook import router as webhook_router
 from .sync import router as sync_router
 
 # Damit die main.py die Router exakt unter diesen Namen importieren kann
@@ -16,6 +15,5 @@ __all__ = [
     "paperless_router",
     "index_router",
     "rag_router",
-    "webhook_router",
     "sync_router",
 ]
