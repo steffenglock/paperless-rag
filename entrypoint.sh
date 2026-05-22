@@ -9,7 +9,7 @@ uvicorn app.main:app \
     --host 127.0.0.1 \
     --port 8000 \
     --workers 1 \
-    --log-level "${LOG_LEVEL:-info}" &
+    --log-level "$(echo ${LOG_LEVEL:-info} | tr '[:upper:]' '[:lower:]')" &
 
 echo "==> Waiting for backend to be ready …"
 # Simple retry loop – avoids nginx 502 on cold starts
