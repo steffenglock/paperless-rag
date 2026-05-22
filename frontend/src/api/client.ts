@@ -1,47 +1,8 @@
 /**
- * Central API client.
- * All backend calls go through these functions.
+ * API Client for Paperless RAG backend
  */
 
 const API_BASE = "/api";
-
-async function request<T>(
-  path: string,
-  options?: RequestInit
-): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
-  }
-
-  return response.json();
-}
-
-/**
- * Remove masked values (containing •) from a config object before saving.
- * This prevents sending partially masked tokens back to the backend.
- */
-export function stripMasked(data: Partial<AppConfig>): Partial<AppConfig> {
-  const result: Partial<AppConfig> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (typeof value === "string" && value.includes("•")) {
-      // Skip masked values – keep existing value in DB
-      continue;
-    }
-    (result as any)[key] = value;
-  }
-  return result;
-}
-
-// ── Config ────────────────────────────────────────────────────────────────────
 
 export interface AppConfig {
   paperless_url: string;
@@ -54,113 +15,95 @@ export interface AppConfig {
   embedding_base_url: string;
   embedding_api_key: string;
   embedding_model: string;
-  webhook_secret: string;
 }
-
-export async function getConfig(): Promise<AppConfig> {
-  return request<AppConfig>("/config");
-}
-
-export async function saveConfig(data: Partial<AppConfig>): Promise<{ success: boolean; message: string }> {
-  // Strip masked values before saving
-  const clean = stripMasked(data);
-  return request("/config", {
-    method: "POST",
-    body: JSON.stringify(clean),
-  });
-}
-
-// ── Paperless ─────────────────────────────────────────────────────────────────
-
-export interface ConnectionTestResult {
-  success: boolean;
-  message: string;
-  document_count?: number;
-  paperless_version?: string;
-}
-
-export async function testPaperlessConnection(
-  paperless_url: string,
-  paperless_token: string
-): Promise<ConnectionTestResult> {
-  return request("/paperless/test-connection", {
-    method: "POST",
-    body: JSON.stringify({ paperless_url, paperless_token }),
-  });
-}
-
-export async function getPaperlessStatus(): Promise<{
-  configured: boolean;
-  connected: boolean;
-  document_count: number;
-  message: string;
-}> {
-  return request("/paperless/status");
-}
-
-// ── Indexing ──────────────────────────────────────────────────────────────────
-
-export interface IndexingStatus {
-  is_running: boolean;
-  total_documents: number;
-  processed_documents: number;
-  failed_documents: number;
-  current_document: string | null;
-  message: string;
-}
-
-export interface IndexStats {
-  indexed_document_count: number;
-  total_chunks: number;
-  collection_name: string;
-}
-
-export async function startIndexing(): Promise<{ success: boolean; message: string }> {
-  return request("/index/start", { method: "POST" });
-}
-
-export async function getIndexingStatus(): Promise<IndexingStatus> {
-  return request("/index/status");
-}
-
-export async function getIndexStats(): Promise<IndexStats> {
-  return request("/index/stats");
-}
-
-// ── RAG Search ────────────────────────────────────────────────────────────────
 
 export interface SearchSource {
   document_id: number;
-  document_title: string;
+  document_title?: string;
   text: string;
   distance: number;
 }
 
-export interface SearchResult {
+export interface SearchResponse {
   answer: string;
   sources: SearchSource[];
-  query: string;
 }
 
-export async function ragSearch(
-  query: string,
-  n_results = 5
-): Promise<SearchResult> {
-  return request("/rag/search", {
+export async function getConfig(): Promise<AppConfig> {
+  const res = await fetch(`${API_BASE}/config`);
+  if (!res.ok) throw new Error("Failed to fetch config");
+  return res.json();
+}
+
+export async function saveConfig(config: AppConfig): Promise<AppConfig> {
+  const res = await fetch(`${API_BASE}/config`, {
     method: "POST",
-    body: JSON.stringify({ query, n_results }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
   });
+  if (!res.ok) throw new Error("Failed to save config");
+  return res.json();
 }
 
-// ── Sync ──────────────────────────────────────────────────────────────────────
-
-export interface SyncResponse {
-  message: string;
-  task: string;
-}
-
-export async function triggerPullSync(): Promise<SyncResponse> {
-  return request<SyncResponse>("/sync/pull", {
+export async function triggerPullSync(): Promise<{ status: string; processed: number }> {
+  const res = await fetch(`${API_BASE}/sync/pull`, {
     method: "POST",
   });
+  if (!res.ok) throw new Error("Failed to trigger sync");
+  return res.json();
+}
+
+export async function checkSetupStatus(): Promise<{ is_setup: boolean }> {
+  const res = await fetch(`${API_BASE}/setup/status`);
+  if (!res.ok) throw new Error("Failed to check setup status");
+  return res.json();
+}
+
+export async function ragSearch(query: string): Promise<SearchResponse> {
+  const res = await fetch(`${API_BASE}/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
+  if (!res.ok) throw new Error("Search failed");
+  return res.json();
+}
+
+export async function getIndexStats(): Promise<{ 
+  total_documents: number; 
+  indexed_documents: number;
+  indexed_document_count?: number; 
+  total_chunks?: number; 
+}> {
+  const res = await fetch(`${API_BASE}/index/stats`);
+  if (!res.ok) throw new Error("Failed to fetch index stats");
+  return res.json();
+}
+
+export async function getPaperlessStatus(): Promise<{ connected: boolean }> {
+  const res = await fetch(`${API_BASE}/paperless/status`);
+  if (!res.ok) throw new Error("Failed to fetch paperless status");
+  return res.json();
+}
+
+export async function testPaperlessConnection(url: string, token: string): Promise<{ success: boolean; message?: string }> {
+  const res = await fetch(`${API_BASE}/setup/test-paperless`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, token }),
+  });
+  if (!res.ok) throw new Error("Connection test failed");
+  return res.json();
+}
+
+export async function startIndexing(): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE}/index/start`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to start indexing");
+  return res.json();
+}
+
+export async function getIndexingStatus(): Promise<{ status: string; progress: number; message?: string; is_running?: boolean }> {
+  const res = await fetch(`${API_BASE}/index/status`);
+  if (!res.ok) throw new Error("Failed to fetch indexing status");
+  return res.json();
 }
