@@ -8,24 +8,42 @@ import type { SearchSource } from "@/api/client";
 interface Props {
   source: SearchSource;
   index: number;
+  paperlessUrl?: string;
 }
 
-const SourceCard: React.FC<Props> = ({ source, index }) => {
+const SourceCard: React.FC<Props> = ({ source, index, paperlessUrl }) => {
   const [expanded, setExpanded] = useState(false);
 
   // Relevance: distance 0 = perfect, 1 = unrelated
   const relevance = Math.round((1 - source.distance) * 100);
 
+  // Konstruiere den direkten Link zum Dokument in Paperless-ngx
+  const docLink = paperlessUrl 
+    ? `${paperlessUrl.rstrip("/")}/documents/${source.document_id}`
+    : null;
+
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="flex-shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700">
             {index}
           </span>
-          <span className="font-medium text-gray-700 truncate">
-            {source.document_title}
-          </span>
+          {docLink ? (
+            <a 
+              href={docLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary-600 hover:text-primary-800 hover:underline truncate"
+              title="In Paperless-ngx öffnen"
+            >
+              {source.document_title || `Dokument #${source.document_id}`}
+            </a>
+          ) : (
+            <span className="font-medium text-gray-700 truncate">
+              {source.document_title || `Dokument #${source.document_id}`}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span
@@ -56,5 +74,16 @@ const SourceCard: React.FC<Props> = ({ source, index }) => {
     </div>
   );
 };
+
+// Hilfsfunktion, um eventuelle Slashes am Ende der URL sicher zu entfernen
+if (!(String.prototype as any).rstrip) {
+  (String.prototype as any).rstrip = function (chars: string) {
+    let end = this.length;
+    while (end > 0 && chars.indexOf(this[end - 1]) !== -1) {
+      end--;
+    }
+    return this.substring(0, end);
+  };
+}
 
 export default SourceCard;

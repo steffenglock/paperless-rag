@@ -98,13 +98,31 @@ const SettingsPage: React.FC = () => {
     setSaving(true);
     setSaveMessage("");
     try {
-      await saveConfig(config);
+      // Erstelle eine Kopie der Config für den Payload
+      const payload = { ...config };
+      
+      // Wenn ein geschütztes Feld leer ist, bedeutet das, es wurde nicht angefasst.
+      // Wir löschen es aus dem Payload, damit das Backend den alten Wert behält.
+      if (payload.paperless_token === "" && savedFields.paperless_token) {
+        delete (payload as any).paperless_token;
+      }
+      if (payload.llm_api_key === "" && savedFields.llm_api_key) {
+        delete (payload as any).llm_api_key;
+      }
+      if (payload.embedding_api_key === "" && savedFields.embedding_api_key) {
+        delete (payload as any).embedding_api_key;
+      }
+
+      await saveConfig(payload);
       setSaveMessage("✅ " + t("settings.saved"));
+      
+      // Aktualisiere den Zustand der gespeicherten Felder anhand der aktuellen Eingaben
       setSavedFields({
-        paperless_token: config.paperless_token !== "",
-        llm_api_key: config.llm_api_key !== "",
-        embedding_api_key: config.embedding_api_key !== "",
+        paperless_token: config.paperless_token !== "" || savedFields.paperless_token,
+        llm_api_key: config.llm_api_key !== "" || savedFields.llm_api_key,
+        embedding_api_key: config.embedding_api_key !== "" || savedFields.embedding_api_key,
       });
+      
       setTimeout(() => setSaveMessage(""), 3000);
     } catch (e: any) {
       setSaveMessage("❌ " + e.message);

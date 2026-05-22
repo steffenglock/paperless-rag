@@ -15,14 +15,18 @@ const ChatPage: React.FC = () => {
   const { messages, isLoading, sendMessage, clearMessages } = useChat();
   const [input, setInput] = useState("");
   const [model, setModel] = useState("");
+  const [paperlessUrl, setPaperlessUrl] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "success" | "error">("idle");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load model name for display
+  // Load config parameters on mount
   useEffect(() => {
-    getConfig().then((c) => setModel(c.llm_model)).catch(() => {});
+    getConfig().then((c) => {
+      setModel(c.llm_model);
+      setPaperlessUrl(c.paperless_url || "");
+    }).catch(() => {});
   }, []);
 
   // Auto-scroll to latest message
@@ -52,7 +56,6 @@ const ChatPage: React.FC = () => {
     try {
       await triggerPullSync();
       setSyncStatus("success");
-      // Status nach 4 Sekunden wieder ausblenden
       setTimeout(() => setSyncStatus("idle"), 4000);
     } catch (err) {
       console.error("Manual sync failed:", err);
@@ -63,7 +66,6 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  // Example questions from i18n
   const exampleQuestions = [
     t("chat.examples.q1"),
     t("chat.examples.q2"),
@@ -78,7 +80,6 @@ const ChatPage: React.FC = () => {
         {/* Messages area */}
         <div className="flex-1 overflow-y-auto px-4 py-6">
           {messages.length === 0 ? (
-            // Empty state
             <div className="flex h-full flex-col items-center justify-center text-center">
               <span className="text-6xl mb-4">📄</span>
               <h2 className="text-xl font-semibold text-gray-700">
@@ -88,7 +89,6 @@ const ChatPage: React.FC = () => {
                 {t("chat.placeholder")}
               </p>
 
-              {/* Example questions */}
               <div className="mt-6 flex flex-col gap-2 w-full max-w-sm">
                 {exampleQuestions.map((q) => (
                   <button
@@ -104,7 +104,11 @@ const ChatPage: React.FC = () => {
           ) : (
             <div className="flex flex-col gap-6">
               {messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
+                <ChatMessage 
+                  key={message.id} 
+                  message={message} 
+                  paperlessUrl={paperlessUrl} 
+                />
               ))}
               <div ref={messagesEndRef} />
             </div>
@@ -114,8 +118,6 @@ const ChatPage: React.FC = () => {
         {/* Input area */}
         <div className="border-t border-gray-200 bg-white px-4 py-4">
           <form onSubmit={handleSubmit} className="flex gap-3 items-end">
-            
-            {/* Sync Button */}
             <button
               type="button"
               onClick={handleManualSync}
@@ -160,7 +162,6 @@ const ChatPage: React.FC = () => {
               disabled={isLoading}
             />
 
-            {/* Clear button */}
             {messages.length > 0 && (
               <button
                 type="button"
@@ -172,7 +173,6 @@ const ChatPage: React.FC = () => {
               </button>
             )}
 
-            {/* Send button */}
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
