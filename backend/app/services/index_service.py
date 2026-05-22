@@ -215,7 +215,6 @@ async def run_full_index(session: Session) -> IndexingResult:
                 failed += 1
                 _update_state(
                     processed_documents=indexed + skipped + failed,
-                    failed_documents=failed,
                     message=f"Failed: {doc.title[:50]} – {exc}",
                 )
                 logger.error(
@@ -329,3 +328,26 @@ async def index_single_document(
             failed_documents=1,
             message=str(exc),
         )
+
+
+def delete_document(session: Session, document_id: int) -> None:
+    """
+    Remove a document completely from the RAG index.
+    Deletes the chunks from ChromaDB and the tracking record from SQLite.
+    """
+    try:
+        # 1. Remove vectors from ChromaDB
+        delete_document_chunks(document_id)
+
+        # 2. Remove tracking record from SQLite
+        existing = _get_indexed_doc(session, document_id)
+        if existing:
+            session.delete(existing)
+            session.commit()
+            logger.info("Deleted document %d from RAG index and tracking database.", document_id)
+        else:
+            logger.info("Document %d not found in tracking database during deletion.", document_id)
+
+    except Exception as exc:
+        logger.exception("Failed to delete document %d from index.", document_id)
+        raise

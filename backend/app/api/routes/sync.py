@@ -25,6 +25,7 @@ async def pull_missing_documents(
     """
     Vergleicht alle Dokumenten-IDs aus Paperless-ngx mit ChromaDB
     und indexiert gezielt nur die fehlenden Dokumente im Hintergrund.
+    Löscht zudem Dokumente, die in Paperless nicht mehr existieren.
     """
     base_url = config_service.get_value(session, "paperless_url")
     token = config_service.get_value(session, "paperless_token")
@@ -36,7 +37,7 @@ async def pull_missing_documents(
         )
 
     try:
-        # 1. Alle IDs aus Paperless holen (Korrekt als Pydantic-Attribut doc.id ausgelesen)
+        # 1. Alle IDs aus Paperless holen
         logger.info("Hole Dokumentenliste von Paperless-ngx...")
         paperless_ids = set()
         
@@ -46,7 +47,7 @@ async def pull_missing_documents(
         
         logger.info("Menge der IDs in Paperless gefunden: %d", len(paperless_ids))
         
-        # 2. Bereits indexierte IDs aus ChromaDB ermitteln (Großes Limit setzen)
+        # 2. Bereits indexierte IDs aus ChromaDB ermitteln
         collection = chroma_service.get_collection()
         existing_data = collection.get(include=["metadatas"], limit=10000)
         
@@ -63,28 +64,39 @@ async def pull_missing_documents(
 
         logger.info("Menge der bereits indizierten Dokument-IDs in RAG: %d", len(indexed_ids))
 
-        # 3. Differenz berechnen
+        # 3. Differenz berechnen (Neu & Gelöscht)
         missing_ids = paperless_ids - indexed_ids
+        deleted_ids = indexed_ids - paperless_ids
         
-        if not missing_ids:
+        if not missing_ids and not deleted_ids:
             logger.info("Pull-Sync beendet: Alles auf dem neuesten Stand.")
             return {
                 "success": True,
-                "message": "Alles aktuell. Keine neuen Dokumente zu indexieren.",
+                "message": "Alles aktuell. Keine neuen oder gelöschten Dokumente gefunden.",
                 "processed_count": 0
             }
             
-        logger.info("Pull-Sync startet: %d neue Dokumente werden zur Indexierung queued. IDs: %s", len(missing_ids), list(missing_ids))
+        # 4. Gelöschte Dokumente aus dem RAG entfernen
+        if deleted_ids:
+            logger.info("Pull-Sync: %d gelöschte Dokumente im RAG gefunden. Bereinige Index...", len(deleted_ids))
+            # Dynamischer Import für Schritt 2 (verhindert Crash, falls Funktion noch fehlt)
+            from app.services.index_service import delete_document
+            for doc_id in deleted_ids:
+                # Löschvorgang als Hintergrund-Task einreihen
+                background_tasks.add_task(delete_document, session, doc_id)
         
-        # 4. Nur die fehlenden IDs in die Queue packen
-        for doc_id in missing_ids:
-            background_tasks.add_task(index_single_document, session, doc_id)
+        # 5. Fehlende Dokumente hinzufügen
+        if missing_ids:
+            logger.info("Pull-Sync startet: %d neue Dokumente werden zur Indexierung queued. IDs: %s", len(missing_ids), list(missing_ids))
+            for doc_id in missing_ids:
+                background_tasks.add_task(index_single_document, session, doc_id)
             
         return {
             "success": True,
-            "message": f"Synchronisation gestartet. {len(missing_ids)} Dokumente werden im Hintergrund verarbeitet.",
-            "processed_count": len(missing_ids),
-            "document_ids": list(missing_ids)
+            "message": f"Synchronisation gestartet. {len(missing_ids)} hinzuzufügen, {len(deleted_ids)} zu löschen.",
+            "processed_count": len(missing_ids) + len(deleted_ids),
+            "document_ids": list(missing_ids),
+            "deleted_ids": list(deleted_ids)
         }
 
     except Exception as e:
