@@ -36,31 +36,24 @@ async def pull_missing_documents(
         )
 
     try:
-        # 1. Alle IDs aus Paperless holen
+        # 1. Alle IDs aus Paperless holen (Korrekt als Pydantic-Attribut doc.id ausgelesen)
         logger.info("Hole Dokumentenliste von Paperless-ngx...")
         paperless_ids = set()
         
         async for doc in paperless_service.get_all_documents(base_url, token):
-            if doc and "id" in doc:
-                paperless_ids.add(int(doc["id"]))
+            if doc and hasattr(doc, "id") and doc.id is not None:
+                paperless_ids.add(int(doc.id))
         
         logger.info("Menge der IDs in Paperless gefunden: %d", len(paperless_ids))
-        if 720 in paperless_ids:
-            logger.info("DEBUG: ID 720 ist in der Paperless-Liste enthalten.")
-        else:
-            logger.warning("DEBUG: ID 720 ist NICHT in der Paperless-Liste enthalten!")
         
-        # 2. Bereits indexierte IDs aus ChromaDB ermitteln (Ohne Limit abrufen!)
+        # 2. Bereits indexierte IDs aus ChromaDB ermitteln (Großes Limit setzen)
         collection = chroma_service.get_collection()
-        # Erhöhe das Limit drastisch, um alle Chunks zu erwischen
         existing_data = collection.get(include=["metadatas"], limit=10000)
         
         indexed_ids = set()
         if existing_data and "metadatas" in existing_data:
-            logger.info("DEBUG: Anzahl der Chunks aus ChromaDB geladen: %d", len(existing_data["metadatas"]))
             for meta in existing_data["metadatas"]:
                 if meta:
-                    # Prüfe alle potenziellen ID-Keys und konvertiere sicher
                     for key in ["document_id", "id", "doc_id"]:
                         if key in meta and meta[key] is not None:
                             try:
@@ -69,14 +62,9 @@ async def pull_missing_documents(
                                 continue
 
         logger.info("Menge der bereits indizierten Dokument-IDs in RAG: %d", len(indexed_ids))
-        if 720 in indexed_ids:
-            logger.info("DEBUG: RAG glaubt, ID 720 ist BEREITS indiziert.")
-        else:
-            logger.info("DEBUG: RAG weiß, ID 720 fehlt im Index.")
 
         # 3. Differenz berechnen
         missing_ids = paperless_ids - indexed_ids
-        logger.info("DEBUG: Berechnete fehlende IDs: %s", list(missing_ids))
         
         if not missing_ids:
             logger.info("Pull-Sync beendet: Alles auf dem neuesten Stand.")
@@ -86,7 +74,7 @@ async def pull_missing_documents(
                 "processed_count": 0
             }
             
-        logger.info("Pull-Sync startet: %d neue Dokumente werden zur Indexierung queued.", len(missing_ids))
+        logger.info("Pull-Sync startet: %d neue Dokumente werden zur Indexierung queued. IDs: %s", len(missing_ids), list(missing_ids))
         
         # 4. Nur die fehlenden IDs in die Queue packen
         for doc_id in missing_ids:
