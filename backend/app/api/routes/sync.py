@@ -36,29 +36,47 @@ async def pull_missing_documents(
         )
 
     try:
-        # 1. Alle IDs aus Paperless holen (Korrekt als Async Generator ausgelesen)
+        # 1. Alle IDs aus Paperless holen
         logger.info("Hole Dokumentenliste von Paperless-ngx...")
         paperless_ids = set()
         
-        # Nutzen von async for, da get_all_documents ein async_generator ist
         async for doc in paperless_service.get_all_documents(base_url, token):
             if doc and "id" in doc:
                 paperless_ids.add(int(doc["id"]))
         
-        # 2. Bereits indexierte IDs aus ChromaDB ermitteln
+        logger.info("Menge der IDs in Paperless gefunden: %d", len(paperless_ids))
+        if 720 in paperless_ids:
+            logger.info("DEBUG: ID 720 ist in der Paperless-Liste enthalten.")
+        else:
+            logger.warning("DEBUG: ID 720 ist NICHT in der Paperless-Liste enthalten!")
+        
+        # 2. Bereits indexierte IDs aus ChromaDB ermitteln (Ohne Limit abrufen!)
         collection = chroma_service.get_collection()
-        existing_data = collection.get(include=["metadatas"])
+        # Erhöhe das Limit drastisch, um alle Chunks zu erwischen
+        existing_data = collection.get(include=["metadatas"], limit=10000)
         
         indexed_ids = set()
         if existing_data and "metadatas" in existing_data:
+            logger.info("DEBUG: Anzahl der Chunks aus ChromaDB geladen: %d", len(existing_data["metadatas"]))
             for meta in existing_data["metadatas"]:
-                if meta and "document_id" in meta:
-                    indexed_ids.add(int(meta["document_id"]))
-                elif meta and "id" in meta:
-                    indexed_ids.add(int(meta["id"]))
+                if meta:
+                    # Prüfe alle potenziellen ID-Keys und konvertiere sicher
+                    for key in ["document_id", "id", "doc_id"]:
+                        if key in meta and meta[key] is not None:
+                            try:
+                                indexed_ids.add(int(meta[key]))
+                            except (ValueError, TypeError):
+                                continue
+
+        logger.info("Menge der bereits indizierten Dokument-IDs in RAG: %d", len(indexed_ids))
+        if 720 in indexed_ids:
+            logger.info("DEBUG: RAG glaubt, ID 720 ist BEREITS indiziert.")
+        else:
+            logger.info("DEBUG: RAG weiß, ID 720 fehlt im Index.")
 
         # 3. Differenz berechnen
         missing_ids = paperless_ids - indexed_ids
+        logger.info("DEBUG: Berechnete fehlende IDs: %s", list(missing_ids))
         
         if not missing_ids:
             logger.info("Pull-Sync beendet: Alles auf dem neuesten Stand.")
