@@ -1,7 +1,7 @@
 """
 Paperless-ngx API routes.
 
-POST /api/paperless/test-connection   → test URL + token from DB
+POST /api/paperless/test-connection  → test URL + token from DB
 GET  /api/paperless/documents         → list documents (paginated)
 GET  /api/paperless/documents/{id}    → fetch single document
 """
@@ -48,9 +48,11 @@ def _get_paperless_credentials(session: Session) -> tuple[str, str]:
 class TestConnectionPayload(BaseModel):
     """
     Optional payload for connection test.
-    If provided, these values are used instead of the stored ones.
-    Useful during the setup wizard before saving.
+    Accepts both 'url'/'token' (from frontend setup) and 
+    'paperless_url'/'paperless_token' for backward compatibility.
     """
+    url: Optional[str] = None
+    token: Optional[str] = None
     paperless_url: Optional[str] = None
     paperless_token: Optional[str] = None
 
@@ -75,15 +77,19 @@ async def test_connection(
     Uses provided credentials if given and not masked,
     otherwise loads from DB.
     """
+    # Parse either the short names (frontend) or long names
+    req_url = payload.url or payload.paperless_url
+    req_token = payload.token or payload.paperless_token
+
     # Use payload values only if they are provided AND not masked (no • character)
-    use_payload_url = payload.paperless_url and "•" not in payload.paperless_url
-    use_payload_token = payload.paperless_token and "•" not in payload.paperless_token
+    use_payload_url = bool(req_url and "•" not in req_url)
+    use_payload_token = bool(req_token and "•" not in req_token)
 
     if use_payload_url and use_payload_token:
-        url = payload.paperless_url
-        token = payload.paperless_token
+        url = req_url
+        token = req_token
     else:
-        # Always load fresh unmasked values from DB
+        # Fallback: load fresh unmasked values from DB
         url, token = _get_paperless_credentials(session)
 
     return await paperless_service.test_connection(url, token)
