@@ -23,7 +23,7 @@ from app.api.routes import (
     index_router,
     rag_router,
     webhook_router,
-    sync, # Unser neuer Pull-Sync Router
+    sync_router, # Der über __init__.py registrierte Sync-Router
 )
 
 # Configure logging
@@ -46,9 +46,10 @@ async def periodic_sync_task():
             session_generator = get_session()
             session = next(session_generator)
             
-            # Wir rufen die Sync-Funktion direkt als Hintergrund-Task auf
+            # Wir rufen die Sync-Funktion direkt auf
+            from app.api.routes.sync import pull_missing_documents
             bg_tasks = BackgroundTasks()
-            await sync.pull_missing_documents(background_tasks=bg_tasks, session=session)
+            await pull_missing_documents(background_tasks=bg_tasks, session=session)
             logger.info("Periodischer Pull-Sync erfolgreich angestoßen.")
         except Exception as e:
             logger.error("Fehler im periodischen Sync-Task: %s", str(e), exc_info=True)
@@ -99,7 +100,7 @@ app.include_router(paperless_router)
 app.include_router(index_router)
 app.include_router(rag_router)
 app.include_router(webhook_router)
-app.include_router(sync.router)  # Registrierung unseres neuen Sync-Endpunkts
+app.include_router(sync_router)  # Registrierung unseres neuen Sync-Endpunkts
 
 
 # ── Health check ─────────────────────────────────────────────
