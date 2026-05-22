@@ -1,0 +1,16 @@
+# Frontend build-artifacts and dependencies
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Backend environments and caches
+backend/__pycache__
+backend/.pytest_cache
+backend/.venv
+.venv
+venv
+
+# Git and OS metadata
+.git
+.gitignore
+.DS_Store
