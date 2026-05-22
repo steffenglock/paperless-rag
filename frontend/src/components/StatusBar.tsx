@@ -26,7 +26,15 @@ const StatusBar: React.FC = () => {
         setConnected(false);
       }
     };
+
+    // 1. Einmal sofort beim Laden ausführen
     load();
+
+    // 2. Timer starten, der die load-Funktion alle 10 Sekunden (10.000 ms) wiederholt
+    const interval = setInterval(load, 10000);
+
+    // 3. Cleanup: Timer stoppen, wenn die Komponente verlassen wird (z.B. bei Seitenwechsel)
+    return () => clearInterval(interval);
   }, []);
 
   return (
