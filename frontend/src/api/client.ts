@@ -72,8 +72,8 @@ export async function ragSearch(query: string): Promise<SearchResponse> {
 export async function getIndexStats(): Promise<{ 
   total_documents: number; 
   indexed_documents: number;
-  indexed_document_count?: number; 
-  total_chunks?: number; 
+  indexed_document_count: number; 
+  total_chunks: number; 
 }> {
   const res = await fetch(`${API_BASE}/index/stats`);
   if (!res.ok) throw new Error("Failed to fetch index stats");
@@ -86,7 +86,7 @@ export async function getPaperlessStatus(): Promise<{ connected: boolean }> {
   return res.json();
 }
 
-export async function testPaperlessConnection(url: string, token: string): Promise<{ success: boolean; message?: string }> {
+export async function testPaperlessConnection(url: string, token: string): Promise<{ success: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/setup/test-paperless`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -102,7 +102,7 @@ export async function startIndexing(): Promise<{ status: string }> {
   return res.json();
 }
 
-export async function getIndexingStatus(): Promise<{ status: string; progress: number; message?: string; is_running?: boolean }> {
+export async function getIndexingStatus(): Promise<{ status: string; progress: number; message: string; is_running: boolean }> {
   const res = await fetch(`${API_BASE}/index/status`);
   if (!res.ok) throw new Error("Failed to fetch indexing status");
   return res.json();
