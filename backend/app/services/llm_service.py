@@ -33,15 +33,18 @@ def _make_llm_client(
     api_key: str,
 ) -> AsyncOpenAI:
     """Create an AsyncOpenAI client for the given LLM provider."""
+    # Verhindere leere Keys, die den "Bearer "-Header beschädigen
+    final_key = api_key if (api_key and api_key.strip() != "") else "not-empty"
+
     if provider == "ollama":
         return AsyncOpenAI(
-            base_url=base_url.rstrip("/") + "/v1",
-            api_key=api_key or "ollama",
+            base_url=base_url.rstrip("/") + "/v1" if base_url else "http://localhost:11434/v1",
+            api_key=final_key,
         )
     else:
         return AsyncOpenAI(
             base_url=base_url.rstrip("/") if base_url else None,
-            api_key=api_key,
+            api_key=final_key,
         )
 
 
