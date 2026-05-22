@@ -7,7 +7,7 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -23,7 +23,7 @@ from app.api.routes import (
     index_router,
     rag_router,
     webhook_router,
-    sync_router, # Der über __init__.py registrierte Sync-Router
+    sync_router,
 )
 
 # Configure logging
@@ -35,27 +35,31 @@ logger = logging.getLogger(__name__)
 
 
 async def periodic_sync_task():
-    """Läuft im Hintergrund und triggert den Pull-Sync alle 15 Minuten."""
+    """Läuft im Hintergrund und triggert den Pull-Sync alle 60 Minuten (Stündlich)."""
     logger.info("Periodischer Synchronisations-Task initialisiert. Warte 30 Sekunden vor dem ersten Lauf...")
-    await asyncio.sleep(30)  # Kurze Pause nach dem Booten, damit alle Dienste bereit sind
+    await asyncio.sleep(30)
     
     while True:
         try:
-            logger.info("Starte automatischen periodischen Pull-Sync...")
-            # Wir holen uns eine Datenbanksitzung über den Generator
+            logger.info("Starte automatischen periodischen Pull-Sync (Stündlich)...")
             session_generator = get_session()
             session = next(session_generator)
             
-            # Wir rufen die Sync-Funktion direkt auf
             from app.api.routes.sync import pull_missing_documents
             bg_tasks = BackgroundTasks()
             await pull_missing_documents(background_tasks=bg_tasks, session=session)
-            logger.info("Periodischer Pull-Sync erfolgreich angestoßen.")
-        except Exception as e:
-            logger.error("Fehler im periodischen Sync-Task: %s", str(e), exc_info=True)
+            logger.info("Periodischer Pull-Sync erfolgreich abgeschlossen/angestoßen.")
             
-        # 900 Sekunden = 15 Minuten Pause bis zum nächsten Abgleich
-        await asyncio.sleep(900)
+        except HTTPException as http_err:
+            if http_err.status_code == 400:
+                logger.warning("Periodischer Sync übersprungen: Paperless API-URL oder Token sind im UI noch nicht konfiguriert.")
+            else:
+                logger.error("HTTP-Fehler im periodischen Sync-Task: %s", http_err.detail)
+        except Exception as e:
+            logger.error("Unerwarteter Fehler im periodischen Sync-Task: %s", str(e), exc_info=True)
+            
+        # 3600 Sekunden = 1 Stunde Pause bis zum nächsten Abgleich
+        await asyncio.sleep(3600)
 
 
 @asynccontextmanager
@@ -65,13 +69,11 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialised at data_dir=%s", settings.data_dir)
     
-    # Startet den periodischen Sync-Timer als echten Hintergrundprozess
     sync_task = asyncio.create_task(periodic_sync_task())
     
     yield
     
     logger.info("Shutting down Paperless RAG backend …")
-    # Beendet den Hintergrund-Task sauber, wenn der Container stoppt
     sync_task.cancel()
     try:
         await sync_task
@@ -100,7 +102,7 @@ app.include_router(paperless_router)
 app.include_router(index_router)
 app.include_router(rag_router)
 app.include_router(webhook_router)
-app.include_router(sync_router)  # Registrierung unseres neuen Sync-Endpunkts
+app.include_router(sync_router)
 
 
 # ── Health check ─────────────────────────────────────────────

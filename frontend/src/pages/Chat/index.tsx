@@ -8,13 +8,15 @@ import Layout from "@/components/Layout";
 import StatusBar from "@/components/StatusBar";
 import ChatMessage from "@/components/ChatMessage";
 import { useChat } from "@/hooks/useChat";
-import { getConfig } from "@/api/client";
+import { getConfig, triggerPullSync } from "@/api/client";
 
 const ChatPage: React.FC = () => {
   const { t } = useTranslation();
   const { messages, isLoading, sendMessage, clearMessages } = useChat();
   const [input, setInput] = useState("");
   const [model, setModel] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "success" | "error">("idle");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -40,6 +42,24 @@ const ChatPage: React.FC = () => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
+    }
+  };
+
+  const handleManualSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    setSyncStatus("idle");
+    try {
+      await triggerPullSync();
+      setSyncStatus("success");
+      // Status nach 4 Sekunden wieder ausblenden
+      setTimeout(() => setSyncStatus("idle"), 4000);
+    } catch (err) {
+      console.error("Manual sync failed:", err);
+      setSyncStatus("error");
+      setTimeout(() => setSyncStatus("idle"), 4000);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -94,6 +114,40 @@ const ChatPage: React.FC = () => {
         {/* Input area */}
         <div className="border-t border-gray-200 bg-white px-4 py-4">
           <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+            
+            {/* Sync Button */}
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className={`rounded-xl border p-3 transition flex items-center justify-center gap-2 ${
+                syncStatus === "success"
+                  ? "bg-green-50 border-green-300 text-green-600"
+                  : syncStatus === "error"
+                  ? "bg-red-50 border-red-300 text-red-600"
+                  : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+              }`}
+              title="Neue Dokumente aus Paperless abrufen"
+            >
+              {isSyncing ? (
+                <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              ) : syncStatus === "success" ? (
+                <span>✓</span>
+              ) : syncStatus === "error" ? (
+                <span>⚠</span>
+              ) : (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18" />
+                </svg>
+              )}
+              <span className="text-xs font-medium hidden sm:inline">
+                {isSyncing ? "Synchronisiere..." : syncStatus === "success" ? "Aktualisiert!" : syncStatus === "error" ? "Fehler!" : "Sync"}
+              </span>
+            </button>
+
             <textarea
               ref={inputRef}
               value={input}

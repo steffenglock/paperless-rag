@@ -151,3 +151,16 @@ export async function ragSearch(
     body: JSON.stringify({ query, n_results }),
   });
 }
+
+// ── Sync ──────────────────────────────────────────────────────────────────────
+
+export interface SyncResponse {
+  message: string;
+  task: string;
+}
+
+export async function triggerPullSync(): Promise<SyncResponse> {
+  return request<SyncResponse>("/sync/pull", {
+    method: "POST",
+  });
+}
