@@ -1,0 +1,19 @@
+# Local development compose file.
+# The frontend Vite dev-server proxies /api to FastAPI directly.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: final          # build full image locally
+    ports:
+      - "3000:3000"          # access app via http://localhost:3000
+    volumes:
+      - ./data:/app/data     # persist SQLite + ChromaDB
+    env_file:
+      - .env
+    restart: unless-stopped
+    extra_hosts:
+      # Allows container to reach Ollama on the host machine
+      - "host.docker.internal:host-gateway"

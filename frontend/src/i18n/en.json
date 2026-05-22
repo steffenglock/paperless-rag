@@ -1,0 +1,127 @@
+{
+  "app": {
+    "title": "Paperless RAG",
+    "loading": "Loading …"
+  },
+  "nav": {
+    "chat": "Search",
+    "settings": "Settings"
+  },
+  "setup": {
+    "title": "Initial Setup",
+    "subtitle": "Welcome to Paperless RAG",
+    "description": "Please configure the connections in the following steps.",
+    "step": "Step",
+    "of": "of",
+    "next": "Next",
+    "back": "Back",
+    "finish": "Finish",
+    "test": "Test Connection",
+    "testing": "Testing …",
+    "save": "Save",
+    "saving": "Saving …",
+    "steps": {
+      "paperless": "Paperless-ngx",
+      "embedding": "Embeddings",
+      "llm": "Language Model",
+      "done": "Done"
+    },
+    "paperless": {
+      "title": "Paperless-ngx Connection",
+      "description": "Connect Paperless RAG to your Paperless-ngx instance.",
+      "url": "Paperless URL",
+      "urlPlaceholder": "http://192.168.1.100:8000",
+      "token": "API Token",
+      "tokenPlaceholder": "Your Paperless API Token",
+      "tokenHelp": "Found at: Settings → Profile → API Token",
+      "tooltip": "Paperless-ngx is your document management system. Enter the address of your Paperless instance and an API token so Paperless RAG can read your documents. Find the token in Paperless under: Settings → Profile → API Token."
+    },
+    "embedding": {
+      "title": "Embedding Configuration",
+      "description": "Embeddings convert text into vectors for semantic search.",
+      "provider": "Provider",
+      "baseUrl": "API URL",
+      "apiKey": "API Key",
+      "model": "Model",
+      "modelPlaceholder": "e.g. nomic-embed-text or openai/text-embedding-3-small",
+      "tooltip": "Embeddings convert text into numbers so the computer can understand which texts are similar in meaning. Ollama runs locally on your machine (free), OpenAI and OpenRouter are online services (paid, but very good). The model 'nomic-embed-text' (Ollama) or 'openai/text-embedding-3-small' (OpenRouter) are good starting points."
+    },
+    "llm": {
+      "title": "Language Model (LLM)",
+      "description": "The language model generates answers based on your documents.",
+      "provider": "Provider",
+      "baseUrl": "API URL",
+      "apiKey": "API Key",
+      "model": "Model",
+      "modelPlaceholder": "e.g. llama3.2 or anthropic/claude-3.5-haiku",
+      "tooltip": "The language model (LLM = Large Language Model) is the AI that answers your questions. Ollama runs locally (free, but needs a powerful computer), OpenRouter gives you access to many models like Claude or GPT-4 (paid). For starters we recommend 'anthropic/claude-3.5-haiku' via OpenRouter."
+    },
+    "done": {
+      "title": "Setup Complete!",
+      "description": "Paperless RAG is ready. You can now search your documents.",
+      "indexButton": "Index Documents Now",
+      "indexing": "Indexing …",
+      "goToSearch": "Go to Search"
+    },
+    "providers": {
+      "ollama": "Ollama (local)",
+      "openai": "OpenAI",
+      "openrouter": "OpenRouter"
+    }
+  },
+  "chat": {
+    "placeholder": "Ask a question about your documents …",
+    "send": "Send",
+    "thinking": "Thinking …",
+    "sources": "Sources",
+    "noResults": "No relevant documents found.",
+    "error": "Search error. Please try again.",
+    "clearHistory": "Clear history",
+    "newLine": "Enter to send · Shift+Enter for new line",
+    "examples": {
+      "q1": "Which Vodafone invoices do I have?",
+      "q2": "What are my latest Amazon orders?",
+      "q3": "Show me all insurance documents"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "saved": "Saved",
+    "save": "Save",
+    "test": "Test",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "reindex": "Re-index",
+    "reindexing": "Indexing …",
+    "savedPlaceholder": "(saved – enter new value to change)",
+    "webhookUrl": "Webhook URL",
+    "webhookPort": "External container port",
+    "webhookPortHelp": "The port the container is reachable on from outside (default: 3000)",
+    "webhookCopy": "Copy URL",
+    "webhookHelp": "Enter this URL in Paperless-ngx under Settings → Workflows.",
+    "webhookSecret": "Webhook Secret (optional)",
+    "webhookSecretHelp": "If set, Paperless-ngx must send this secret in the request header.",
+    "tooltips": {
+      "paperless": "Paperless-ngx is your document management system. Enter the address of your Paperless instance and an API token so Paperless RAG can read your documents. Find the token in Paperless under: Settings → Profile → API Token.",
+      "embedding": "Embeddings convert text into numbers so the computer can understand which texts are similar in meaning. Ollama runs locally on your machine (free), OpenAI and OpenRouter are online services (paid, but very good). The model 'nomic-embed-text' (Ollama) or 'openai/text-embedding-3-small' (OpenRouter) are good starting points.",
+      "llm": "The language model (LLM = Large Language Model) is the AI that answers your questions. Ollama runs locally (free, but needs a powerful computer), OpenRouter gives you access to many models like Claude or GPT-4 (paid). For starters we recommend 'anthropic/claude-3.5-haiku' via OpenRouter.",
+      "webhook": "A webhook is an automatic notification. When you add a new document in Paperless-ngx, Paperless sends a message to this URL – and Paperless RAG automatically indexes the document.",
+      "indexing": "During indexing all your Paperless documents are read, split into small text sections (chunks) and stored as vectors. This enables semantic search. New documents are automatically indexed via webhook."
+    }
+  },
+  "status": {
+    "indexed": "{{count}} documents indexed",
+    "chunks": "{{count}} chunks",
+    "model": "Model: {{model}}"
+  },
+  "errors": {
+    "connectionFailed": "Connection failed",
+    "saveFailed": "Save failed",
+    "unknown": "Unknown error"
+  },
+  "language": {
+    "de": "Deutsch",
+    "en": "English",
+    "switch": "Switch language"
+  }
+}

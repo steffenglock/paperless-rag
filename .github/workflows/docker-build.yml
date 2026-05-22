@@ -1,0 +1,12 @@
+# Placeholder – will be fully configured in Step 11 (CI/CD).
+name: Docker Build (placeholder)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "CI/CD will be configured in Step 11"

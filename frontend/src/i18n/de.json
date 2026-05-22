@@ -1,0 +1,127 @@
+{
+  "app": {
+    "title": "Paperless RAG",
+    "loading": "Wird geladen …"
+  },
+  "nav": {
+    "chat": "Suche",
+    "settings": "Einstellungen"
+  },
+  "setup": {
+    "title": "Ersteinrichtung",
+    "subtitle": "Willkommen bei Paperless RAG",
+    "description": "Bitte konfiguriere die Verbindungen in den folgenden Schritten.",
+    "step": "Schritt",
+    "of": "von",
+    "next": "Weiter",
+    "back": "Zurück",
+    "finish": "Abschließen",
+    "test": "Verbindung testen",
+    "testing": "Teste …",
+    "save": "Speichern",
+    "saving": "Speichert …",
+    "steps": {
+      "paperless": "Paperless-ngx",
+      "embedding": "Embeddings",
+      "llm": "Sprachmodell",
+      "done": "Fertig"
+    },
+    "paperless": {
+      "title": "Paperless-ngx Verbindung",
+      "description": "Verbinde Paperless RAG mit deiner Paperless-ngx Instanz.",
+      "url": "Paperless URL",
+      "urlPlaceholder": "http://192.168.1.100:8000",
+      "token": "API Token",
+      "tokenPlaceholder": "Dein Paperless API Token",
+      "tokenHelp": "Zu finden unter: Einstellungen → Profil → API Token",
+      "tooltip": "Paperless-ngx ist dein Dokumenten-Management-System. Hier gibst du die Adresse deiner Paperless-Instanz und einen API-Token ein, damit Paperless RAG deine Dokumente lesen kann. Den Token findest du in Paperless unter: Einstellungen → Profil → API Token."
+    },
+    "embedding": {
+      "title": "Embedding Konfiguration",
+      "description": "Embeddings wandeln Text in Vektoren um für die semantische Suche.",
+      "provider": "Anbieter",
+      "baseUrl": "API URL",
+      "apiKey": "API Schlüssel",
+      "model": "Modell",
+      "modelPlaceholder": "z.B. nomic-embed-text oder openai/text-embedding-3-small",
+      "tooltip": "Embeddings wandeln Text in Zahlen um, damit der Computer verstehen kann welche Texte inhaltlich ähnlich sind. Ollama läuft lokal auf deinem Rechner (kostenlos), OpenAI und OpenRouter sind Online-Dienste (kostenpflichtig, aber sehr gut). Das Modell 'nomic-embed-text' (Ollama) oder 'openai/text-embedding-3-small' (OpenRouter) sind gute Startpunkte."
+    },
+    "llm": {
+      "title": "Sprachmodell (LLM)",
+      "description": "Das Sprachmodell generiert die Antworten basierend auf deinen Dokumenten.",
+      "provider": "Anbieter",
+      "baseUrl": "API URL",
+      "apiKey": "API Schlüssel",
+      "model": "Modell",
+      "modelPlaceholder": "z.B. llama3.2 oder anthropic/claude-3.5-haiku",
+      "tooltip": "Das Sprachmodell (LLM = Large Language Model) ist die KI die deine Fragen beantwortet. Ollama läuft lokal (kostenlos, aber braucht einen leistungsstarken Rechner), OpenRouter gibt dir Zugang zu vielen Modellen wie Claude oder GPT-4 (kostenpflichtig). Für den Anfang empfehlen wir 'anthropic/claude-3.5-haiku' über OpenRouter."
+    },
+    "done": {
+      "title": "Einrichtung abgeschlossen!",
+      "description": "Paperless RAG ist bereit. Du kannst jetzt deine Dokumente durchsuchen.",
+      "indexButton": "Dokumente jetzt indexieren",
+      "indexing": "Indexierung läuft …",
+      "goToSearch": "Zur Suche"
+    },
+    "providers": {
+      "ollama": "Ollama (lokal)",
+      "openai": "OpenAI",
+      "openrouter": "OpenRouter"
+    }
+  },
+  "chat": {
+    "placeholder": "Stelle eine Frage zu deinen Dokumenten …",
+    "send": "Senden",
+    "thinking": "Denke nach …",
+    "sources": "Quellen",
+    "noResults": "Keine relevanten Dokumente gefunden.",
+    "error": "Fehler bei der Suche. Bitte versuche es erneut.",
+    "clearHistory": "Verlauf löschen",
+    "newLine": "Enter zum Senden · Shift+Enter für neue Zeile",
+    "examples": {
+      "q1": "Welche Vodafone-Rechnungen habe ich?",
+      "q2": "Was sind meine letzten Amazon-Bestellungen?",
+      "q3": "Zeige mir alle Versicherungsdokumente"
+    }
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "saved": "Gespeichert",
+    "save": "Speichern",
+    "test": "Testen",
+    "connected": "Verbunden",
+    "disconnected": "Nicht verbunden",
+    "reindex": "Neu indexieren",
+    "reindexing": "Indexierung läuft …",
+    "savedPlaceholder": "(gespeichert – neu eingeben zum Ändern)",
+    "webhookUrl": "Webhook URL",
+    "webhookPort": "Externer Port des Containers",
+    "webhookPortHelp": "Der Port über den der Container von außen erreichbar ist (Standard: 3000)",
+    "webhookCopy": "URL kopieren",
+    "webhookHelp": "Trage diese URL in Paperless-ngx unter Einstellungen → Workflows ein.",
+    "webhookSecret": "Webhook Secret (optional)",
+    "webhookSecretHelp": "Falls gesetzt, muss Paperless-ngx dieses Secret im Header mitsenden.",
+    "tooltips": {
+      "paperless": "Paperless-ngx ist dein Dokumenten-Management-System. Hier gibst du die Adresse deiner Paperless-Instanz und einen API-Token ein, damit Paperless RAG deine Dokumente lesen kann. Den Token findest du in Paperless unter: Einstellungen → Profil → API Token.",
+      "embedding": "Embeddings wandeln Text in Zahlen um, damit der Computer verstehen kann welche Texte inhaltlich ähnlich sind. Ollama läuft lokal auf deinem Rechner (kostenlos), OpenAI und OpenRouter sind Online-Dienste (kostenpflichtig, aber sehr gut). Das Modell 'nomic-embed-text' (Ollama) oder 'openai/text-embedding-3-small' (OpenRouter) sind gute Startpunkte.",
+      "llm": "Das Sprachmodell (LLM = Large Language Model) ist die KI die deine Fragen beantwortet. Ollama läuft lokal (kostenlos, aber braucht einen leistungsstarken Rechner), OpenRouter gibt dir Zugang zu vielen Modellen wie Claude oder GPT-4 (kostenpflichtig). Für den Anfang empfehlen wir 'anthropic/claude-3.5-haiku' über OpenRouter.",
+      "webhook": "Ein Webhook ist eine automatische Benachrichtigung. Wenn du in Paperless-ngx ein neues Dokument hinzufügst, schickt Paperless eine Nachricht an diese URL – und Paperless RAG indexiert das Dokument dann automatisch.",
+      "indexing": "Bei der Indexierung werden alle deine Paperless-Dokumente eingelesen, in kleine Textabschnitte (Chunks) aufgeteilt und als Vektoren gespeichert. Das ermöglicht die semantische Suche. Neue Dokumente werden automatisch per Webhook indexiert."
+    }
+  },
+  "status": {
+    "indexed": "{{count}} Dokumente indexiert",
+    "chunks": "{{count}} Chunks",
+    "model": "Modell: {{model}}"
+  },
+  "errors": {
+    "connectionFailed": "Verbindung fehlgeschlagen",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "unknown": "Unbekannter Fehler"
+  },
+  "language": {
+    "de": "Deutsch",
+    "en": "English",
+    "switch": "Sprache wechseln"
+  }
+}
