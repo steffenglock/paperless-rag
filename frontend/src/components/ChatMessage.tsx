@@ -17,9 +17,10 @@ export interface Message {
 
 interface Props {
   message: Message;
+  paperlessUrl?: string;
 }
 
-const ChatMessage: React.FC<Props> = ({ message }) => {
+const ChatMessage: React.FC<Props> = ({ message, paperlessUrl }) => {
   const { t } = useTranslation();
   const isUser = message.role === "user";
 
@@ -61,7 +62,12 @@ const ChatMessage: React.FC<Props> = ({ message }) => {
               {t("chat.sources")}:
             </p>
             {message.sources.map((source, i) => (
-              <SourceCard key={source.document_id} source={source} index={i + 1} />
+              <SourceCard 
+                key={`${source.document_id}-${i}`} 
+                source={source} 
+                index={i + 1} 
+                paperlessUrl={paperlessUrl}
+              />
             ))}
           </div>
         )}

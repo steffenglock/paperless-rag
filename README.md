@@ -1,41 +1,19 @@
 # Paperless RAG
 
-> RAG-powered semantic search for your [Paperless-ngx](https://docs.paperless-ngx.com) documents.
+RAG-powered (Retrieval-Augmented Generation) semantic search and assistant for your Paperless-ngx documents. Ask questions about your archived documents and get precise answers with clickable source links.
 
-## Stack
+## Features
 
-| Layer      | Technology                              |
-|------------|-----------------------------------------|
-| Backend    | Python 3.12 · FastAPI · SQLite · ChromaDB |
-| Frontend   | React 18 · Vite · TypeScript · TailwindCSS |
-| Container  | Single Docker container (amd64 + arm64) |
-| LLM        | Ollama / OpenAI-compatible APIs         |
+- **Automated Sync:** Pulls new document metadata from Paperless-ngx automatically every hour.
+- **Manual Sync:** Trigger an immediate sync directly from the chat UI with a single click.
+- **Clickable Sources:** References used by the LLM display as cards under the response and link directly back to the original document inside Paperless-ngx.
+- **Robust Security:** Masked API-Keys in the frontend prevent unintentional overwrites when changing model configurations.
 
-## Quick Start
+## Setup & Configuration
 
-```bash
-cp .env.example .env
-# Edit .env with your Paperless-ngx URL and token
-
-docker compose up -d
-# Open http://localhost:3000
-```
-
-## Development
-
-```bash
-# Backend
-cd backend && pip install -r requirements.txt
-uvicorn app.main:app --reload
-
-# Frontend (separate terminal)
-cd frontend && npm install && npm run dev
-```
-
-## Configuration
-
-See `.env.example` for all available environment variables.
-
-## License
-
-MIT
+1. Open the **Settings** page in the web user interface.
+2. Configure your **Paperless-ngx** connection:
+   - **URL:** The base URL of your Paperless-ngx instance (e.g., `http://192.168.178.153:8010`).
+   - **API Token:** Your personal API access token generated in Paperless.
+3. Configure your **Embeddings** and **LLM** providers (Supports OpenRouter, OpenAI, and Ollama).
+4. Save the configuration and click **Sync** on the main dashboard to start your first background indexation.
