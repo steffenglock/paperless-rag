@@ -1,12 +1,12 @@
 """
 Webhook endpoint for automatic document indexing.
-Diagnose-Version zum Sichtbarmachen der Paperless-Daten.
+Highly tolerant production version.
 """
 
 import logging
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, status
+from fastapi import APIRouter, Depends, BackgroundTasks, Request
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -29,26 +29,53 @@ async def document_webhook(
     background_tasks: BackgroundTasks,
     session: DbSession,
 ):
-    # 1. Den absolut rohen Inhalt der Anfrage auslesen
+    # Rohen Inhalt auslesen
     raw_body = await request.body()
-    # In Text umwandeln (Sollten Binärdaten kommen, fangen wir Fehler ab)
     body_text = ""
     try:
         body_text = raw_body.decode("utf-8")
     except Exception as e:
-        body_text = f"[Binärdaten/Nicht-UTF8: {str(e)} - Erste 100 Bytes: {str(raw_body[:100])}]"
+        body_text = f"[Form-Data/Binary: {str(e)}]"
 
-    # 2. Exakte Ausgabe im Log erzwingen (Das ist unser Diagnose-Fenster!)
-    logger.error("!!! DIAGNOSE - START !!!")
-    logger.error("Roher Webhook-Inhalt von Paperless: %s", body_text)
-    logger.error("Content-Type Header: %s", request.headers.get("content-type"))
-    logger.error("!!! DIAGNOSE - ENDE !!!")
+    logger.info("Webhook empfangen. Inhalt: %s", body_text)
 
-    # Wir brechen hier absichtlich kontrolliert ab, bis wir das Log analysiert haben
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Diagnose-Modus aktiv. Bitte Log prüfen.",
-    )
+    # Versuche, eine ID aus dem Text zu extrahieren (falls vorhanden)
+    doc_id = None
+    
+    # Einfache Suche nach Zahlenwerten, falls es sich um Form-Data handelt
+    if "document_id=" in body_text:
+        try:
+            doc_id = int(body_text.split("document_id=")[1].split("&")[0])
+        except (ValueError, IndexFormatter):
+            pass
+            
+    # Falls es JSON ist, versuche strukturiert zu parsen
+    if doc_id is None:
+        try:
+            payload = await request.json()
+            if payload:
+                if "document_id" in payload:
+                    doc_id = payload["document_id"]
+                elif "id" in payload:
+                    doc_id = payload["id"]
+                elif "document" in payload and isinstance(payload["document"], dict):
+                    doc_id = payload["document"].get("id")
+        except Exception:
+            pass
+
+    # Fallunterscheidung: ID gefunden oder leeres Paket
+    if doc_id is not None:
+        try:
+            doc_id = int(doc_id)
+            logger.info("Gültige Dokumenten-ID %d gefunden. Indexierung gestartet.", doc_id)
+            background_tasks.add_task(index_single_document, session, doc_id)
+            return WebhookResponse(success=True, message="Indexing queued.", document_id=doc_id)
+        except (ValueError, TypeError):
+            pass
+
+    # Wenn das Paket leer ist ({}), antworten wir trotzdem mit 200 OK, damit Paperless Ruhe gibt
+    logger.info("Webhook enthielt keine Dokumenten-ID. Anfrage ignoriert.")
+    return WebhookResponse(success=True, message="Webhook received but no action required (empty payload).")
 
 @router.get("/health")
 def webhook_health():
