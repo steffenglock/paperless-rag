@@ -26,8 +26,9 @@ async def pull_missing_documents(
     Vergleicht alle Dokumenten-IDs aus Paperless-ngx mit ChromaDB
     und indexiert gezielt nur die fehlenden Dokumente im Hintergrund.
     """
-    base_url = config_service.get_value(session, "paperless_base_url")
-    token = config_service.get_value(session, "paperless_api_token")
+    # Keys korrigiert passend zur App-Datenbankstruktur
+    base_url = config_service.get_value(session, "paperless_url")
+    token = config_service.get_value(session, "paperless_token")
     
     if not base_url or not token:
         raise HTTPException(
@@ -42,7 +43,6 @@ async def pull_missing_documents(
         paperless_ids = {int(doc["id"]) for doc in paperless_docs if "id" in doc}
         
         # 2. Bereits indexierte IDs aus ChromaDB ermitteln
-        # Wir holen uns die Kollektion direkt, um die IDs auszulesen
         collection = chroma_service.get_collection()
         existing_data = collection.get(include=["metadatas"])
         
