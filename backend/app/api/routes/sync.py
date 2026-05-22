@@ -26,7 +26,6 @@ async def pull_missing_documents(
     Vergleicht alle Dokumenten-IDs aus Paperless-ngx mit ChromaDB
     und indexiert gezielt nur die fehlenden Dokumente im Hintergrund.
     """
-    # Keys korrigiert passend zur App-Datenbankstruktur
     base_url = config_service.get_value(session, "paperless_url")
     token = config_service.get_value(session, "paperless_token")
     
@@ -37,10 +36,14 @@ async def pull_missing_documents(
         )
 
     try:
-        # 1. Alle IDs aus Paperless holen
+        # 1. Alle IDs aus Paperless holen (Korrekt als Async Generator ausgelesen)
         logger.info("Hole Dokumentenliste von Paperless-ngx...")
-        paperless_docs = await paperless_service.get_all_documents(base_url, token)
-        paperless_ids = {int(doc["id"]) for doc in paperless_docs if "id" in doc}
+        paperless_ids = set()
+        
+        # Nutzen von async for, da get_all_documents ein async_generator ist
+        async for doc in paperless_service.get_all_documents(base_url, token):
+            if doc and "id" in doc:
+                paperless_ids.add(int(doc["id"]))
         
         # 2. Bereits indexierte IDs aus ChromaDB ermitteln
         collection = chroma_service.get_collection()
@@ -54,7 +57,7 @@ async def pull_missing_documents(
                 elif meta and "id" in meta:
                     indexed_ids.add(int(meta["id"]))
 
-        # 3. Differenz berechnen (Nur was in Paperless ist, aber nicht im RAG)
+        # 3. Differenz berechnen
         missing_ids = paperless_ids - indexed_ids
         
         if not missing_ids:
@@ -67,7 +70,7 @@ async def pull_missing_documents(
             
         logger.info("Pull-Sync startet: %d neue Dokumente werden zur Indexierung queued.", len(missing_ids))
         
-        # 4. Gecallt wird nur die Differenz -> Spart massiv Token!
+        # 4. Nur die fehlenden IDs in die Queue packen
         for doc_id in missing_ids:
             background_tasks.add_task(index_single_document, session, doc_id)
             
