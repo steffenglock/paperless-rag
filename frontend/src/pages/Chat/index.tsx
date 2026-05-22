@@ -23,9 +23,12 @@ const ChatPage: React.FC = () => {
 
   // Load config parameters on mount
   useEffect(() => {
-    getConfig().then((c) => {
-      setModel(c.llm_model);
-      setPaperlessUrl(c.paperless_url || "");
+    getConfig().then((c: any) => {
+      if (c) {
+        setModel(c.llm_model || "");
+        // Sicheres Auslesen aller potenziellen URL-Keys aus dem API-Response
+        setPaperlessUrl(c.paperless_url || c.paperless_base_url || "");
+      }
     }).catch(() => {});
   }, []);
 
@@ -81,7 +84,14 @@ const ChatPage: React.FC = () => {
         <div className="flex-1 overflow-y-auto px-4 py-6">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
-              <span className="text-6xl mb-4">📄</span>
+              
+              {/* Neues Logo anstelle des Emojis */}
+              <img 
+                src="/paperlessRAG.png" 
+                alt="Paperless RAG" 
+                className="mx-auto max-h-64 w-auto object-contain mb-6"
+              />
+              
               <h2 className="text-xl font-semibold text-gray-700">
                 {t("app.title")}
               </h2>
