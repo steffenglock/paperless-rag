@@ -58,7 +58,6 @@ const SettingsPage: React.FC = () => {
     embedding_base_url: "https://openrouter.ai/api/v1",
     embedding_api_key: "",
     embedding_model: "",
-    webhook_secret: "",
   });
 
   const [savedFields, setSavedFields] = useState<Record<string, boolean>>({});
@@ -76,15 +75,15 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     getConfig().then((c) => {
       setSavedFields({
-        paperless_token: c.paperless_token.includes("•"),
-        llm_api_key: c.llm_api_key.includes("•"),
-        embedding_api_key: c.embedding_api_key.includes("•"),
+        paperless_token: c.paperless_token?.includes("•") || false,
+        llm_api_key: c.llm_api_key?.includes("•") || false,
+        embedding_api_key: c.embedding_api_key?.includes("•") || false,
       });
       setConfig({
         ...c,
-        paperless_token: c.paperless_token.includes("•") ? "" : c.paperless_token,
-        llm_api_key: c.llm_api_key.includes("•") ? "" : c.llm_api_key,
-        embedding_api_key: c.embedding_api_key.includes("•") ? "" : c.embedding_api_key,
+        paperless_token: c.paperless_token?.includes("•") ? "" : c.paperless_token,
+        llm_api_key: c.llm_api_key?.includes("•") ? "" : c.llm_api_key,
+        embedding_api_key: c.embedding_api_key?.includes("•") ? "" : c.embedding_api_key,
       });
     }).catch(() => {});
     getIndexStats().then(setIndexStats).catch(() => {});
@@ -98,11 +97,8 @@ const SettingsPage: React.FC = () => {
     setSaving(true);
     setSaveMessage("");
     try {
-      // Erstelle eine Kopie der Config für den Payload
       const payload = { ...config };
       
-      // Wenn ein geschütztes Feld leer ist, bedeutet das, es wurde nicht angefasst.
-      // Wir löschen es aus dem Payload, damit das Backend den alten Wert behält.
       if (payload.paperless_token === "" && savedFields.paperless_token) {
         delete (payload as any).paperless_token;
       }
@@ -116,7 +112,6 @@ const SettingsPage: React.FC = () => {
       await saveConfig(payload);
       setSaveMessage("✅ " + t("settings.saved"));
       
-      // Aktualisiere den Zustand der gespeicherten Felder anhand der aktuellen Eingaben
       setSavedFields({
         paperless_token: config.paperless_token !== "" || savedFields.paperless_token,
         llm_api_key: config.llm_api_key !== "" || savedFields.llm_api_key,
