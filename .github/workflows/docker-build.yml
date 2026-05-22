@@ -1,12 +1,67 @@
-# Placeholder – will be fully configured in Step 11 (CI/CD).
-name: Docker Build (placeholder)
+# GitHub Actions workflow for multi-arch Docker build and push to Docker Hub.
+# Triggers on push to main branch and on version tags (v*.*.*).
+
+name: Build & Push Docker Image
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:    # allow manual trigger from GitHub UI
 
 jobs:
   build:
+    name: Build Multi-Arch Image
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - run: echo "CI/CD will be configured in Step 11"
+      # ── Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Docker Meta ─────────────────────────────────────────────────────
+      # Automatically generates tags and labels:
+      # - main branch  → :latest
+      # - v1.2.3 tag   → :1.2.3, :1.2, :1, :latest
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/paperless-rag
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # ── QEMU ────────────────────────────────────────────────────────────
+      # Required for cross-platform builds (arm64 on amd64 runner)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # ── Buildx ──────────────────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Login ────────────────────────────────────────────────────────────
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ── Build & Push ─────────────────────────────────────────────────────
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache layers between builds for faster CI
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
