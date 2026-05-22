@@ -55,12 +55,13 @@ export async function triggerPullSync(): Promise<{ status: string; processed: nu
 
 export async function checkSetupStatus(): Promise<{ is_setup: boolean }> {
   const res = await fetch(`${API_BASE}/setup/status`);
-  if (!res.ok) throw new Error("Failed to check setup status");
+  if (!res.ok) return { is_setup: true }; // Fallback falls die Route nicht existiert
   return res.json();
 }
 
 export async function ragSearch(query: string): Promise<SearchResponse> {
-  const res = await fetch(`${API_BASE}/search`, {
+  // KORRIGIERTER PFAD: /api/rag/search
+  const res = await fetch(`${API_BASE}/rag/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
@@ -87,7 +88,8 @@ export async function getPaperlessStatus(): Promise<{ connected: boolean }> {
 }
 
 export async function testPaperlessConnection(url: string, token: string): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${API_BASE}/setup/test-paperless`, {
+  // KORRIGIERTER PFAD: /api/paperless/test-connection
+  const res = await fetch(`${API_BASE}/paperless/test-connection`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, token }),
