@@ -3,11 +3,6 @@ Webhook endpoint for automatic document indexing.
 
 Paperless-ngx can call this endpoint when a document is added or updated.
 The endpoint triggers re-indexing of the affected document.
-
-Paperless-ngx webhook configuration:
-  URL:    http://<paperless-rag-host>:3000/api/webhook/document
-  Method: POST
-  Events: document_added, document_updated
 """
 
 import hashlib
@@ -38,38 +33,11 @@ class WebhookResponse(BaseModel):
     document_id: Optional[int] = None
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _verify_webhook_secret(
-    secret: str,
-    payload_body: str,
-    signature_header: Optional[str],
-) -> bool:
-    """
-    Verify HMAC-SHA256 signature if a webhook secret is configured.
-    Returns True if no secret is configured (open endpoint).
-    """
-    if not secret:
-        return True   # no secret configured – allow all requests
-
-    if not signature_header:
-        logger.warning("Webhook request missing signature header")
-        return False
-
-    expected = hmac.new(
-        secret.encode(),
-        payload_body.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-
-    return hmac.compare_digest(expected, signature_header)
-
-
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/document", response_model=WebhookResponse)
 async def document_webhook(
-    request: Request,  # Nutzen des rohen Request-Objekts für maximale Flexibilität beim JSON-Format
+    request: Request,
     background_tasks: BackgroundTasks,
     session: DbSession,
     x_webhook_secret: Annotated[Optional[str], Header()] = None,
@@ -77,42 +45,55 @@ async def document_webhook(
     """
     Receives a webhook call from Paperless-ngx and triggers
     re-indexing of the affected document in the background.
-    Supports both old flat JSON payloads and new nested workflow formats.
+    Supports JSON payloads, multi-part form data, and fallback form parameters.
     """
-    # Rohes JSON einlesen, um Schema-Fehler (422) bei verschachtelten Strukturen zu verhindern
+    payload: Dict[str, Any] = {}
+    
+    # 1. Versuch: Extrahiere Formulardaten (Falls Paperless Parameter schickt)
     try:
-        payload: Dict[str, Any] = await request.json()
-    except Exception as e:
-        logger.error("Invalid JSON received in webhook: %s", str(e))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid JSON payload.",
-        )
+        form_data = await request.form()
+        if form_data:
+            payload = dict(form_data)
+            logger.debug("Webhook Form-Data empfangen: %s", payload)
+    except Exception:
+        pass
 
-    logger.debug("Webhook payload received: %s", payload)
+    # 2. Versuch: Falls Form-Data leer war, versuche JSON auszulesen
+    if not payload:
+        try:
+            payload = await request.json()
+            logger.debug("Webhook JSON empfangen: %s", payload)
+        except Exception:
+            pass
 
     doc_id = None
 
-    # Flexibles Extrahieren der Dokumenten-ID aus verschiedenen Paperless-Formaten
-    # 1. Flache Struktur (Standard Webhooks oder ältere Versionen)
-    if "id" in payload and payload["id"] is not None:
-        doc_id = payload["id"]
-    elif "document_id" in payload and payload["document_id"] is not None:
+    # Flexibles Auslesen der ID aus allen denkbaren Paperless-Varianten
+    if "document_id" in payload and payload["document_id"] is not None:
         doc_id = payload["document_id"]
-    # 2. Verschachtelte Struktur (Paperless-ngx ab v2.0+ via Workflows)
+    elif "id" in payload and payload["id"] is not None:
+        doc_id = payload["id"]
     elif "document" in payload and isinstance(payload["document"], dict):
         doc_id = payload["document"].get("id")
     elif "data" in payload and isinstance(payload["data"], dict):
         doc_id = payload["data"].get("id")
 
+    # Absicherung: Falls Paperless die Parameter als Rohdaten/Strings geschickt hat
+    if doc_id is None and payload:
+        # Falls ein Key existiert, der die ID enthält (z.B. bei Falschformatierungen)
+        for key, value in payload.items():
+            if "id" in key.lower():
+                doc_id = value
+                break
+
     if doc_id is None:
-        logger.error("No valid document ID found in webhook payload. Fields present: %s", list(payload.keys()))
+        logger.error("Keine ID im Payload gefunden. Empfangene Daten: %s", payload)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Payload must contain a valid document ID.",
         )
 
-    # Typ-Sicherheit garantieren (ID muss eine Ganzzahl sein)
+    # Typ-Sicherheit garantieren (ID zu Integer konvertieren)
     try:
         doc_id = int(doc_id)
     except (ValueError, TypeError):
@@ -125,19 +106,13 @@ async def document_webhook(
     webhook_secret = config_service.get_value(session, "webhook_secret") or ""
     if webhook_secret:
         if not x_webhook_secret or x_webhook_secret != webhook_secret:
-            logger.warning(
-                "Webhook request with invalid secret for document %d", doc_id
-            )
+            logger.warning("Webhook request mit ungültigem Secret für Dokument %d", doc_id)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook secret.",
             )
 
-    logger.info(
-        "Webhook received: event=%s document_id=%d",
-        payload.get("event") or "unknown",
-        doc_id,
-    )
+    logger.info("Webhook erfolgreich empfangen und akzeptiert! Dokumenten-ID=%d", doc_id)
 
     # Index the document in the background
     background_tasks.add_task(index_single_document, session, doc_id)
@@ -151,5 +126,4 @@ async def document_webhook(
 
 @router.get("/health")
 def webhook_health():
-    """Simple health check for the webhook endpoint."""
     return {"status": "ok", "endpoint": "/api/webhook/document"}
