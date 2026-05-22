@@ -3,7 +3,6 @@
  */
 
 import React, { useState } from "react";
-import { useTranslation } from "react-i18next";
 import type { SearchSource } from "@/api/client";
 
 interface Props {
@@ -12,7 +11,6 @@ interface Props {
 }
 
 const SourceCard: React.FC<Props> = ({ source, index }) => {
-  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   // Relevance: distance 0 = perfect, 1 = unrelated
