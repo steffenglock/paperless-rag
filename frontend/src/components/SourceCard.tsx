@@ -11,8 +11,9 @@ interface Props {
   paperlessUrl?: string;
 }
 
-// Hilfsfunktion zum Entfernen von Slashes am Ende eines Strings
-const removeTrailingSlash = (url: string): string => {
+// Kugelsichere Hilfsfunktion zum Entfernen von Slashes am Ende eines Strings
+const removeTrailingSlash = (url: any): string => {
+  if (!url || typeof url !== "string") return "";
   return url.endsWith("/") ? url.slice(0, -1) : url;
 };
 
@@ -23,8 +24,9 @@ const SourceCard: React.FC<Props> = ({ source, index, paperlessUrl }) => {
   const relevance = Math.round((1 - source.distance) * 100);
 
   // Konstruiere den direkten Link zum Dokument in Paperless-ngx
-  const docLink = paperlessUrl 
-    ? `${removeTrailingSlash(paperlessUrl)}/documents/${source.document_id}`
+  const cleanUrl = removeTrailingSlash(paperlessUrl);
+  const docLink = cleanUrl && source.document_id
+    ? `${cleanUrl}/documents/${source.document_id}`
     : null;
 
   return (
