@@ -13,9 +13,9 @@ Paperless-ngx webhook configuration:
 import hashlib
 import hmac
 import logging
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Any, Dict
 
-from fastapi import APIRouter, Depends, Header, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, Header, HTTPException, BackgroundTasks, Request, status
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -31,18 +31,6 @@ DbSession = Annotated[Session, Depends(get_session)]
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
-
-class WebhookPayload(BaseModel):
-    """
-    Payload sent by Paperless-ngx when a document event occurs.
-    Paperless sends different formats depending on version;
-    we support both the 'id' and 'document_id' field names.
-    """
-    id: Optional[int] = None
-    document_id: Optional[int] = None
-    event: Optional[str] = None        # e.g. "document_added"
-    task_id: Optional[str] = None      # Paperless task UUID
-
 
 class WebhookResponse(BaseModel):
     success: bool
@@ -81,7 +69,7 @@ def _verify_webhook_secret(
 
 @router.post("/document", response_model=WebhookResponse)
 async def document_webhook(
-    payload: WebhookPayload,
+    request: Request,  # Nutzen des rohen Request-Objekts für maximale Flexibilität beim JSON-Format
     background_tasks: BackgroundTasks,
     session: DbSession,
     x_webhook_secret: Annotated[Optional[str], Header()] = None,
@@ -89,14 +77,48 @@ async def document_webhook(
     """
     Receives a webhook call from Paperless-ngx and triggers
     re-indexing of the affected document in the background.
+    Supports both old flat JSON payloads and new nested workflow formats.
     """
-    # Resolve document ID from either field name
-    doc_id = payload.id or payload.document_id
-
-    if doc_id is None:
+    # Rohes JSON einlesen, um Schema-Fehler (422) bei verschachtelten Strukturen zu verhindern
+    try:
+        payload: Dict[str, Any] = await request.json()
+    except Exception as e:
+        logger.error("Invalid JSON received in webhook: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Payload must contain 'id' or 'document_id'.",
+            detail="Invalid JSON payload.",
+        )
+
+    logger.debug("Webhook payload received: %s", payload)
+
+    doc_id = None
+
+    # Flexibles Extrahieren der Dokumenten-ID aus verschiedenen Paperless-Formaten
+    # 1. Flache Struktur (Standard Webhooks oder ältere Versionen)
+    if "id" in payload and payload["id"] is not None:
+        doc_id = payload["id"]
+    elif "document_id" in payload and payload["document_id"] is not None:
+        doc_id = payload["document_id"]
+    # 2. Verschachtelte Struktur (Paperless-ngx ab v2.0+ via Workflows)
+    elif "document" in payload and isinstance(payload["document"], dict):
+        doc_id = payload["document"].get("id")
+    elif "data" in payload and isinstance(payload["data"], dict):
+        doc_id = payload["data"].get("id")
+
+    if doc_id is None:
+        logger.error("No valid document ID found in webhook payload. Fields present: %s", list(payload.keys()))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payload must contain a valid document ID.",
+        )
+
+    # Typ-Sicherheit garantieren (ID muss eine Ganzzahl sein)
+    try:
+        doc_id = int(doc_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document ID must be an integer.",
         )
 
     # Check webhook secret if configured
@@ -113,7 +135,7 @@ async def document_webhook(
 
     logger.info(
         "Webhook received: event=%s document_id=%d",
-        payload.event or "unknown",
+        payload.get("event") or "unknown",
         doc_id,
     )
 
