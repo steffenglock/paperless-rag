@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/steffenglock/paperless-rag/blob/main/frontend/public/paperlessRAG.png?raw=true" alt="PaperlessRAG Logo" width="15%">
+</p>
+
 # Paperless RAG
 
 RAG-powered (Retrieval-Augmented Generation) semantic search and assistant for your Paperless-ngx documents. Ask questions about your archived documents and get precise answers with clickable source links.
