@@ -31,7 +31,8 @@ DbSession = Annotated[Session, Depends(get_session)]
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
-    n_results: int = Field(default=5, ge=1, le=20)
+    # Erhöht auf 10 für mehr Kontext (ca. 8-10 Seiten)
+    n_results: int = Field(default=10, ge=1, le=50)
 
 
 class SearchResponse(BaseModel):
@@ -42,7 +43,8 @@ class SearchResponse(BaseModel):
 
 class SimilarChunksRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
-    n_results: int = Field(default=5, ge=1, le=20)
+    # Erhöht auf 10
+    n_results: int = Field(default=10, ge=1, le=50)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

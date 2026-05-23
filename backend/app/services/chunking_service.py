@@ -13,8 +13,8 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 # Default chunking parameters
-DEFAULT_CHUNK_SIZE = 1000      # characters per chunk
-DEFAULT_CHUNK_OVERLAP = 200    # overlap between consecutive chunks
+DEFAULT_CHUNK_SIZE = 3000      # characters per chunk
+DEFAULT_CHUNK_OVERLAP = 400    # overlap between consecutive chunks
 MIN_CHUNK_LENGTH = 50          # ignore chunks shorter than this
 
 
