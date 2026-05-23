@@ -300,7 +300,7 @@ async def index_single_document(
         delete_document_chunks(doc.id)
         add_chunks(chunks, embeddings)
 
-        content_hash = compute_content_hash(content)
+        content_hash = compute_content_hash(content + "_chunksize_2500")
         _save_indexed_doc(
             session, doc.id, doc.title, len(chunks), content_hash
         )
