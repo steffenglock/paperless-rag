@@ -3,8 +3,10 @@ Application configuration loaded from environment variables.
 All sensitive values are read at startup; defaults are safe for local dev.
 """
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_RAG_CONTEXT_MAX_CHARS = 12000
 
 
 class Settings(BaseSettings):
@@ -36,6 +38,11 @@ class Settings(BaseSettings):
     # App
     log_level: str = Field(default="INFO")
     data_dir: str = Field(default="/app/data")
+    # Complete excerpts only; sized for the API's default retrieval of 10 chunks.
+    rag_context_max_chars: int = Field(
+        default=DEFAULT_RAG_CONTEXT_MAX_CHARS,
+        ge=1,
+    )
 
 
 # Singleton – import this everywhere

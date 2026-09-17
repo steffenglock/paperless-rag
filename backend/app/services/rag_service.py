@@ -10,19 +10,21 @@ Pipeline:
 """
 
 import logging
-from typing import AsyncIterator, Optional
+import re
+import unicodedata
+from collections.abc import AsyncIterator
 
-from app.services.embedding_service import embed_query
-from app.services.chroma_service import query_collection
-from app.services import llm_service, config_service
 from sqlmodel import Session
+
+from app.config import settings
+from app.services import config_service, llm_service
+from app.services.chroma_service import query_collection
+from app.services.embedding_service import embed_query
 
 logger = logging.getLogger(__name__)
 
-# How many chunks to retrieve from ChromaDB
-DEFAULT_N_RESULTS = 5
-# Maximum characters of context to send to the LLM
-MAX_CONTEXT_CHARS = 6000
+# Ten retrieved chunks pair with the default 12,000-character complete-excerpt budget.
+DEFAULT_RAG_N_RESULTS = 10
 
 
 def _build_context(chunks: list[dict]) -> str:
@@ -45,6 +47,77 @@ def _build_context(chunks: list[dict]) -> str:
         )
 
     return "\n\n---\n\n".join(parts)
+
+
+def _prepare_context(
+    query: str,
+    chunks: list[dict],
+    max_context_chars: int,
+) -> tuple[str, list[dict]]:
+    """Select complete chunks that fit and build their shared LLM context."""
+    selected: list[dict] = []
+    context = ""
+
+    normalized_query = _normalize_title(query)
+
+    def priority(chunk: dict) -> tuple[bool, int]:
+        normalized_title = _normalize_title(chunk["document_title"])
+        title_match_length = (
+            len(normalized_title)
+            if _query_mentions_title(normalized_query, chunk["document_title"])
+            else 0
+        )
+        return (
+            not _query_mentions_document_id(normalized_query, chunk["document_id"]),
+            -title_match_length,
+        )
+
+    prioritized_chunks = sorted(chunks, key=priority)
+
+    for chunk in prioritized_chunks:
+        candidate_chunks = [*selected, chunk]
+        candidate_context = _build_context(candidate_chunks)
+        if len(candidate_context) <= max_context_chars:
+            selected = candidate_chunks
+            context = candidate_context
+
+    dropped_chunk_count = len(chunks) - len(selected)
+    if dropped_chunk_count:
+        logger.warning(
+            "RAG context budget excluded chunks",
+            extra={
+                "event": "rag_context_budget_exceeded",
+                "retrieved_chunk_count": len(chunks),
+                "selected_chunk_count": len(selected),
+                "dropped_chunk_count": dropped_chunk_count,
+                "context_budget_chars": max_context_chars,
+            },
+        )
+
+    return context, selected
+
+
+def _normalize_title(value: str) -> str:
+    """Normalize Unicode, case and whitespace for exact title matching."""
+    return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def _query_mentions_title(normalized_query: str, title: str) -> bool:
+    normalized_title = _normalize_title(title)
+    if not normalized_title:
+        return False
+    return re.search(
+        rf"(?<!\w){re.escape(normalized_title)}(?!\w)", normalized_query
+    ) is not None
+
+
+def _query_mentions_document_id(normalized_query: str, document_id: int) -> bool:
+    """Match IDs only after an explicit document/ID marker, never as substrings."""
+    marker = r"(?:(?:document|dokument)(?:\s*-\s*|\s+)(?:id)?|id)"
+    return re.search(
+        rf"(?<!\w){marker}[:#]?\s*(?<!\d){re.escape(str(document_id))}(?!\d)",
+        normalized_query,
+    ) is not None
 
 
 def _build_prompt(query: str, context: str) -> str:
@@ -82,7 +155,7 @@ def _get_embedding_config(session: Session) -> dict:
 async def search_and_answer(
     query: str,
     session: Session,
-    n_results: int = DEFAULT_N_RESULTS,
+    n_results: int = DEFAULT_RAG_N_RESULTS,
 ) -> dict:
     """
     Full RAG pipeline – returns answer + source chunks.
@@ -105,7 +178,7 @@ async def search_and_answer(
         }
 
     # 1. Embed the query (Session wird mitgereicht)
-    logger.info("RAG query: '%s'", query[:80])
+    logger.info("Starting RAG query", extra={"event": "rag_query_started"})
     query_embedding = await embed_query(
         query,
         provider=emb_config["provider"],
@@ -128,10 +201,15 @@ async def search_and_answer(
     logger.info("Retrieved %d chunks from ChromaDB", len(chunks))
 
     # 3. Build context and prompt
-    context = _build_context(chunks)
-
-    if len(context) > MAX_CONTEXT_CHARS:
-        context = context[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated…]"
+    context, selected_chunks = _prepare_context(
+        query, chunks, max_context_chars=settings.rag_context_max_chars
+    )
+    if not selected_chunks:
+        return {
+            "answer": "No relevant documents found for your query.",
+            "sources": [],
+            "query": query,
+        }
 
     prompt = _build_prompt(query, context)
 
@@ -152,7 +230,7 @@ async def search_and_answer(
             "text": chunk["text"][:300] + "…" if len(chunk["text"]) > 300 else chunk["text"],
             "distance": round(chunk["distance"], 4),
         }
-        for chunk in chunks
+        for chunk in selected_chunks
     ]
 
     return {
@@ -165,7 +243,7 @@ async def search_and_answer(
 async def stream_answer(
     query: str,
     session: Session,
-    n_results: int = DEFAULT_N_RESULTS,
+    n_results: int = DEFAULT_RAG_N_RESULTS,
 ) -> AsyncIterator[str]:
     """
     Streaming RAG pipeline – yields answer tokens as they arrive.
@@ -189,9 +267,12 @@ async def stream_answer(
         yield "No relevant documents found for your query."
         return
 
-    context = _build_context(chunks)
-    if len(context) > MAX_CONTEXT_CHARS:
-        context = context[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated…]"
+    context, selected_chunks = _prepare_context(
+        query, chunks, max_context_chars=settings.rag_context_max_chars
+    )
+    if not selected_chunks:
+        yield "No relevant documents found for your query."
+        return
 
     prompt = _build_prompt(query, context)
 
