@@ -1,5 +1,5 @@
 # GitHub Actions workflow for multi-arch Docker build and push to Docker Hub.
-# Triggers on push to main branch and on version tags (v*.*.*).
+# Triggers on push to main and on the prepared stable v0.2.0 release tag.
 
 name: Build & Push Docker Image
 
@@ -8,7 +8,7 @@ on:
     branches:
       - main
     tags:
-      - "v*.*.*"
+      - "v0.2.0"
   workflow_dispatch:    # allow manual trigger from GitHub UI
 
 jobs:
@@ -22,20 +22,17 @@ jobs:
         uses: actions/checkout@v4
 
       # ── Docker Meta ─────────────────────────────────────────────────────
-      # Automatically generates tags and labels:
-      # - main branch  → :latest
-      # - v1.2.3 tag   → :1.2.3, :1.2, :1, :latest
+      # Publish only the supported channel tags:
+      # - main branch → :latest
+      # - v0.2.0 tag  → :0.2, :latest
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/paperless-rag
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=0.2,enable=${{ github.ref == 'refs/tags/v0.2.0' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/tags/v0.2.0' }}
 
       # ── QEMU ────────────────────────────────────────────────────────────
       # Required for cross-platform builds (arm64 on amd64 runner)
