@@ -2,7 +2,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
@@ -11,6 +11,10 @@ sys.path.insert(0, str(BACKEND_DIR))
 # leaking the stubs into other test modules.
 sqlmodel = types.ModuleType("sqlmodel")
 sqlmodel.Session = object
+sqlmodel.select = lambda model: model
+
+indexing_models = types.ModuleType("app.models.indexing")
+indexing_models.IndexedDocument = type("IndexedDocument", (), {})
 
 embedding_service = types.ModuleType("app.services.embedding_service")
 embedding_service.embed_query = None
@@ -27,6 +31,7 @@ with patch.dict(
     sys.modules,
     {
         "sqlmodel": sqlmodel,
+        "app.models.indexing": indexing_models,
         "app.config": app_config,
         "app.services.embedding_service": embedding_service,
         "app.services.chroma_service": chroma_service,
@@ -36,7 +41,7 @@ with patch.dict(
 ):
     from app.services import rag_service
 
-rag_service.logger.disabled = True
+sys.path.remove(str(BACKEND_DIR))
 
 
 def make_chunk(document_id: int, title: str, text: str, distance: float = 0.1) -> dict:
@@ -48,6 +53,12 @@ def make_chunk(document_id: int, title: str, text: str, distance: float = 0.1) -
         "distance": distance,
         "chunk_index": 0,
     }
+
+
+def empty_session() -> Mock:
+    session = Mock()
+    session.exec.return_value.all.return_value = []
+    return session
 
 
 class PrepareContextTests(unittest.TestCase):
@@ -76,13 +87,13 @@ class PrepareContextTests(unittest.TestCase):
         secret_text = "private document contents"
         chunks = [make_chunk(9, "Private title", secret_text)]
 
-        with patch.object(rag_service.logger, "warning") as warning:
+        with patch.object(rag_service.logger, "info") as info:
             context, selected = rag_service._prepare_context(
                 secret_query, chunks, max_context_chars=1
             )
 
         self.assertEqual((context, selected), ("", []))
-        warning.assert_called_once_with(
+        info.assert_called_once_with(
             "RAG context budget excluded chunks",
             extra={
                 "event": "rag_context_budget_exceeded",
@@ -92,7 +103,7 @@ class PrepareContextTests(unittest.TestCase):
                 "context_budget_chars": 1,
             },
         )
-        logged_values = repr(warning.call_args)
+        logged_values = repr(info.call_args)
         self.assertNotIn(secret_query, logged_values)
         self.assertNotIn(secret_text, logged_values)
         self.assertNotIn("Private title", logged_values)
@@ -158,8 +169,124 @@ class PrepareContextTests(unittest.TestCase):
         self.assertTrue(rag_service._query_mentions_document_id("use id:42", 42))
         self.assertFalse(rag_service._query_mentions_document_id("use id:42", 142))
 
+    def test_explicit_retrieval_keeps_first_chunk_when_semantic_results_duplicate_it(
+        self,
+    ):
+        targeted = make_chunk(42, "Requested", "targeted contents", distance=0.2)
+        semantic_duplicate = {
+            **targeted,
+            "text": "semantic duplicate",
+            "distance": 0.1,
+        }
+        semantic_other = make_chunk(1, "Other", "other contents")
+        session = Mock()
+        session.exec.return_value.all.return_value = [
+            types.SimpleNamespace(paperless_id=42, title="Requested")
+        ]
+        query = Mock(side_effect=[[targeted], [semantic_duplicate, semantic_other]])
+
+        with patch.object(rag_service, "query_collection", query):
+            chunks = rag_service._retrieve_chunks(
+                "Use document ID 42", [0.1], session, n_results=10
+            )
+
+        self.assertEqual(chunks, [targeted, semantic_other])
+
 
 class AnswerPathTests(unittest.IsolatedAsyncioTestCase):
+    async def test_search_retrieves_exact_id_missing_from_semantic_results(self):
+        semantic_chunk = make_chunk(1, "Semantic result", "unrelated")
+        exact_chunk = make_chunk(42, "Requested document", "requested contents")
+        indexed_documents = [
+            types.SimpleNamespace(paperless_id=1, title="Semantic result"),
+            types.SimpleNamespace(paperless_id=42, title="Requested document"),
+        ]
+        session = Mock()
+        session.exec.return_value.all.return_value = indexed_documents
+        config = {
+            "provider": "test",
+            "base_url": "",
+            "api_key": "",
+            "model": "configured",
+        }
+
+        def retrieve(_embedding, n_results, document_ids=None):
+            return [exact_chunk] if document_ids == [42] else [semantic_chunk]
+
+        complete = AsyncMock(return_value="answer")
+        with (
+            patch.object(rag_service, "_get_embedding_config", return_value=config),
+            patch.object(rag_service, "_get_llm_config", return_value=config),
+            patch.object(rag_service, "embed_query", AsyncMock(return_value=[0.1])),
+            patch.object(
+                rag_service, "query_collection", Mock(side_effect=retrieve)
+            ) as query,
+            patch.object(rag_service.llm_service, "complete", complete, create=True),
+        ):
+            result = await rag_service.search_and_answer(
+                "What does document ID 42 say?", session
+            )
+
+        self.assertEqual(result["sources"][0]["document_id"], 42)
+        self.assertIn("requested contents", complete.await_args.args[0])
+        self.assertIn(
+            call([0.1], n_results=10, document_ids=[42]),
+            query.call_args_list,
+        )
+
+    async def test_stream_retrieves_exact_title_missing_from_semantic_results(self):
+        semantic_chunk = make_chunk(1, "Semantic result", "unrelated")
+        exact_chunk = make_chunk(42, "Annual   Report.PDF", "requested contents")
+        indexed_documents = [
+            types.SimpleNamespace(paperless_id=1, title="Semantic result"),
+            types.SimpleNamespace(paperless_id=42, title="Annual   Report.PDF"),
+        ]
+        session = Mock()
+        session.exec.return_value.all.return_value = indexed_documents
+        config = {
+            "provider": "test",
+            "base_url": "",
+            "api_key": "",
+            "model": "configured",
+        }
+
+        def retrieve(_embedding, n_results, document_ids=None):
+            return [exact_chunk] if document_ids == [42] else [semantic_chunk]
+
+        prompts = []
+
+        async def stream_complete(prompt, **_kwargs):
+            prompts.append(prompt)
+            yield "answer"
+
+        with (
+            patch.object(rag_service, "_get_embedding_config", return_value=config),
+            patch.object(rag_service, "_get_llm_config", return_value=config),
+            patch.object(rag_service, "embed_query", AsyncMock(return_value=[0.1])),
+            patch.object(
+                rag_service, "query_collection", Mock(side_effect=retrieve)
+            ) as query,
+            patch.object(
+                rag_service.llm_service,
+                "stream_complete",
+                stream_complete,
+                create=True,
+            ),
+        ):
+            streamed = [
+                token
+                async for token in rag_service.stream_answer(
+                    "Summarize annual report.pdf", session
+                )
+            ]
+
+        self.assertEqual(streamed, ["answer"])
+        self.assertIn("requested contents", prompts[0])
+        self.assertIn(
+            call([0.1], n_results=10, document_ids=[42]),
+            query.call_args_list,
+        )
+
     async def test_search_skips_llm_when_no_complete_chunk_fits(self):
         chunks = [make_chunk(1, "Document", "content")]
         config = {
@@ -178,12 +305,12 @@ class AnswerPathTests(unittest.IsolatedAsyncioTestCase):
             patch.object(rag_service.llm_service, "complete", complete, create=True),
             patch.object(rag_service.settings, "rag_context_max_chars", 1),
         ):
-            result = await rag_service.search_and_answer("question", object())
+            result = await rag_service.search_and_answer("question", empty_session())
 
         self.assertEqual(
             result,
             {
-                "answer": "No relevant documents found for your query.",
+                "answer": "Relevant documents were found, but none fit within the configured context budget.",
                 "sources": [],
                 "query": "question",
             },
@@ -218,10 +345,18 @@ class AnswerPathTests(unittest.IsolatedAsyncioTestCase):
             patch.object(rag_service.settings, "rag_context_max_chars", 1),
         ):
             streamed = [
-                token async for token in rag_service.stream_answer("question", object())
+                token
+                async for token in rag_service.stream_answer(
+                    "question", empty_session()
+                )
             ]
 
-        self.assertEqual(streamed, ["No relevant documents found for your query."])
+        self.assertEqual(
+            streamed,
+            [
+                "Relevant documents were found, but none fit within the configured context budget."
+            ],
+        )
         stream_complete.assert_not_called()
 
     async def test_search_sources_only_include_chunks_used_in_context(self):
@@ -258,11 +393,9 @@ class AnswerPathTests(unittest.IsolatedAsyncioTestCase):
             patch.object(rag_service.llm_service, "complete", complete, create=True),
             patch.object(rag_service.settings, "rag_context_max_chars", budget),
         ):
-            result = await rag_service.search_and_answer("question", object())
+            result = await rag_service.search_and_answer("question", empty_session())
 
-        self.assertEqual(
-            [source["document_id"] for source in result["sources"]], [1]
-        )
+        self.assertEqual([source["document_id"] for source in result["sources"]], [1])
         prompt = complete.await_args.args[0]
         self.assertIn("fits", prompt)
         self.assertNotIn("does not fit", prompt)
@@ -299,15 +432,19 @@ class AnswerPathTests(unittest.IsolatedAsyncioTestCase):
                 create=True,
             ),
         ):
-            await rag_service.search_and_answer("same query", object())
+            await rag_service.search_and_answer("same query", empty_session())
             streamed = [
                 token
-                async for token in rag_service.stream_answer("same query", object())
+                async for token in rag_service.stream_answer(
+                    "same query", empty_session()
+                )
             ]
 
         self.assertEqual(streamed, ["token"])
         self.assertEqual(prepare_context.call_count, 2)
-        self.assertEqual(prepare_context.call_args_list[0], prepare_context.call_args_list[1])
+        self.assertEqual(
+            prepare_context.call_args_list[0], prepare_context.call_args_list[1]
+        )
 
     async def test_context_budget_comes_from_application_settings(self):
         self.assertTrue(hasattr(rag_service, "settings"))
@@ -334,7 +471,7 @@ class AnswerPathTests(unittest.IsolatedAsyncioTestCase):
                 create=True,
             ),
         ):
-            await rag_service.search_and_answer("question", object())
+            await rag_service.search_and_answer("question", empty_session())
 
         prepare_context.assert_called_once_with(
             "question", chunks, max_context_chars=4321
@@ -363,7 +500,7 @@ class AnswerPathTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(rag_service.logger, "info") as info,
         ):
-            await rag_service.search_and_answer(secret_query, object())
+            await rag_service.search_and_answer(secret_query, empty_session())
 
         self.assertNotIn(secret_query, repr(info.call_args_list))
 

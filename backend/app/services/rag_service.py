@@ -14,9 +14,10 @@ import re
 import unicodedata
 from collections.abc import AsyncIterator
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.config import settings
+from app.models.indexing import IndexedDocument
 from app.services import config_service, llm_service
 from app.services.chroma_service import query_collection
 from app.services.embedding_service import embed_query
@@ -25,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 # Ten retrieved chunks pair with the default 12,000-character complete-excerpt budget.
 DEFAULT_RAG_N_RESULTS = 10
+CONTEXT_BUDGET_MESSAGE = (
+    "Relevant documents were found, but none fit within the configured context budget."
+)
 
 
 def _build_context(chunks: list[dict]) -> str:
@@ -41,10 +45,7 @@ def _build_context(chunks: list[dict]) -> str:
         text = chunk["text"]
 
         seen_docs.add(doc_id)
-        parts.append(
-            f"[Excerpt {i} – from document: \"{title}\" (ID: {doc_id})]\n"
-            f"{text}"
-        )
+        parts.append(f'[Excerpt {i} – from document: "{title}" (ID: {doc_id})]\n{text}')
 
     return "\n\n---\n\n".join(parts)
 
@@ -83,7 +84,7 @@ def _prepare_context(
 
     dropped_chunk_count = len(chunks) - len(selected)
     if dropped_chunk_count:
-        logger.warning(
+        logger.info(
             "RAG context budget excluded chunks",
             extra={
                 "event": "rag_context_budget_exceeded",
@@ -106,18 +107,67 @@ def _query_mentions_title(normalized_query: str, title: str) -> bool:
     normalized_title = _normalize_title(title)
     if not normalized_title:
         return False
-    return re.search(
-        rf"(?<!\w){re.escape(normalized_title)}(?!\w)", normalized_query
-    ) is not None
+    return (
+        re.search(rf"(?<!\w){re.escape(normalized_title)}(?!\w)", normalized_query)
+        is not None
+    )
 
 
 def _query_mentions_document_id(normalized_query: str, document_id: int) -> bool:
     """Match IDs only after an explicit document/ID marker, never as substrings."""
     marker = r"(?:(?:document|dokument)(?:\s*-\s*|\s+)(?:id)?|id)"
-    return re.search(
-        rf"(?<!\w){marker}[:#]?\s*(?<!\d){re.escape(str(document_id))}(?!\d)",
-        normalized_query,
-    ) is not None
+    return (
+        re.search(
+            rf"(?<!\w){marker}[:#]?\s*(?<!\d){re.escape(str(document_id))}(?!\d)",
+            normalized_query,
+        )
+        is not None
+    )
+
+
+def _retrieve_chunks(
+    query: str,
+    query_embedding: list[float],
+    session: Session,
+    n_results: int,
+) -> list[dict]:
+    """Retrieve explicit document matches before deduplicated semantic results."""
+    normalized_query = _normalize_title(query)
+    indexed_documents = session.exec(select(IndexedDocument)).all()
+    explicit_documents = sorted(
+        (
+            document
+            for document in indexed_documents
+            if _query_mentions_document_id(normalized_query, document.paperless_id)
+            or _query_mentions_title(normalized_query, document.title)
+        ),
+        key=lambda document: (
+            not _query_mentions_document_id(normalized_query, document.paperless_id),
+            -len(_normalize_title(document.title)),
+        ),
+    )
+    explicit_document_ids = list(
+        dict.fromkeys(document.paperless_id for document in explicit_documents)
+    )
+
+    chunks: list[dict] = []
+    if explicit_document_ids:
+        chunks.extend(
+            query_collection(
+                query_embedding,
+                n_results=n_results,
+                document_ids=explicit_document_ids,
+            )
+        )
+    chunks.extend(query_collection(query_embedding, n_results=n_results))
+
+    unique_chunks: list[dict] = []
+    seen_chunk_ids: set[str] = set()
+    for chunk in chunks:
+        if chunk["id"] not in seen_chunk_ids:
+            unique_chunks.append(chunk)
+            seen_chunk_ids.add(chunk["id"])
+    return unique_chunks
 
 
 def _build_prompt(query: str, context: str) -> str:
@@ -189,7 +239,7 @@ async def search_and_answer(
     )
 
     # 2. Retrieve relevant chunks from ChromaDB
-    chunks = query_collection(query_embedding, n_results=n_results)
+    chunks = _retrieve_chunks(query, query_embedding, session, n_results)
 
     if not chunks:
         return {
@@ -206,7 +256,7 @@ async def search_and_answer(
     )
     if not selected_chunks:
         return {
-            "answer": "No relevant documents found for your query.",
+            "answer": CONTEXT_BUDGET_MESSAGE,
             "sources": [],
             "query": query,
         }
@@ -227,7 +277,9 @@ async def search_and_answer(
         {
             "document_id": chunk["document_id"],
             "document_title": chunk["document_title"],
-            "text": chunk["text"][:300] + "…" if len(chunk["text"]) > 300 else chunk["text"],
+            "text": chunk["text"][:300] + "…"
+            if len(chunk["text"]) > 300
+            else chunk["text"],
             "distance": round(chunk["distance"], 4),
         }
         for chunk in selected_chunks
@@ -261,7 +313,7 @@ async def stream_answer(
         session=session,
     )
 
-    chunks = query_collection(query_embedding, n_results=n_results)
+    chunks = _retrieve_chunks(query, query_embedding, session, n_results)
 
     if not chunks:
         yield "No relevant documents found for your query."
@@ -271,7 +323,7 @@ async def stream_answer(
         query, chunks, max_context_chars=settings.rag_context_max_chars
     )
     if not selected_chunks:
-        yield "No relevant documents found for your query."
+        yield CONTEXT_BUDGET_MESSAGE
         return
 
     prompt = _build_prompt(query, context)
