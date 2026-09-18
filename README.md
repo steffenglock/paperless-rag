@@ -6,6 +6,12 @@
 
 RAG-powered (Retrieval-Augmented Generation) semantic search and assistant for your Paperless-ngx documents. Ask questions about your archived documents and get precise answers with clickable source links.
 
+## User Interface
+
+Ask questions, sync your documents, and access model settings from the Paperless RAG web interface.
+
+![Paperless RAG web interface](docs/images/paperless-rag-ui.png)
+
 ## Features
 
 - **Automated Sync:** Pulls new document metadata from Paperless-ngx automatically every hour.
