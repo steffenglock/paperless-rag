@@ -14,7 +14,6 @@ Ask questions, sync your documents, and access model settings from the Paperless
 
 ## Features
 
-- **Automated Sync:** Pulls new document metadata from Paperless-ngx automatically every hour.
 - **Manual Sync:** Trigger an immediate sync directly from the chat UI with a single click.
 - **Clickable Sources:** References used by the LLM display as cards under the response and link directly back to the original document inside Paperless-ngx.
 - **Robust Security:** Masked API-Keys in the frontend prevent unintentional overwrites when changing model configurations.
